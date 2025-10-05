@@ -112,8 +112,12 @@ app.get('/verify', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.status(200).send('Poker Joker ist am Start!');
+  res.sendFile(path.join(__dirname, 'public', 'app', 'index.html'));
 });
+
+// app.get('/', (req, res) => {
+ //  res.status(200).send('Poker Joker ist am Start!');
+// });
 
 /* =======================================================================
  * 8) Mail & Kontakt
