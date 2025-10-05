@@ -111,6 +111,10 @@ app.get('/verify', (req, res) => {
   res.redirect(`/api/auth/verify?token=${req.query.token}`);
 });
 
+app.get('/', (req, res) => {
+  res.status(200).send('Poker Joker ist am Start!');
+});
+
 /* =======================================================================
  * 8) Mail & Kontakt
  * ======================================================================= */
