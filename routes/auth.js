@@ -1,14 +1,19 @@
+// ============================================================
+// routes/auth.js (Brevo clean version)
+// ============================================================
+
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
-const { pool } = require('../db');
 const bcrypt = require('bcrypt');
+const { pool } = require('../db');
+const { sendMail } = require('../utils/mailer'); // <— Brevo-Mailer nutzen
 
 const SALT_ROUNDS = 10;
 const WELCOME_TOKENS = Number(process.env.WELCOME_TOKENS || 1000);
 
+// === Hilfsfunktionen ===
 function sha256(s) {
   return crypto.createHash('sha256').update(s).digest('hex');
 }
@@ -22,15 +27,11 @@ async function ensureTables() {
       is_admin BOOLEAN DEFAULT FALSE,
       tokens INTEGER DEFAULT 0,
       purchased INTEGER DEFAULT 0,
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT NOW(),
+      email_verified BOOLEAN DEFAULT false,
+      verify_token TEXT
     );
 
-    ALTER TABLE public.users
-      ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false,
-      ADD COLUMN IF NOT EXISTS verify_token TEXT;
-  `);
-
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS public.password_resets (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
@@ -38,13 +39,11 @@ async function ensureTables() {
       expires_at TIMESTAMPTZ NOT NULL,
       used BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      used_at TIMESTAMPTZ
+      used_at TIMESTAMPTZ,
+      request_ip inet,
+      request_ua text,
+      request_email text
     );
-
-    ALTER TABLE public.password_resets
-      ADD COLUMN IF NOT EXISTS request_ip inet,
-      ADD COLUMN IF NOT EXISTS request_ua text,
-      ADD COLUMN IF NOT EXISTS request_email text;
 
     CREATE INDEX IF NOT EXISTS ix_pwres_user_open
       ON public.password_resets(user_id)
@@ -63,7 +62,9 @@ function setSessionCookie(res, payload) {
   });
 }
 
-// === LOGIN ===
+// ============================================================
+// LOGIN
+// ============================================================
 router.post('/login', async (req, res) => {
   try {
     await ensureTables();
@@ -84,8 +85,8 @@ router.post('/login', async (req, res) => {
     if (!user) return res.status(401).json({ ok: false, message: 'Login fehlgeschlagen' });
 
     if (!user.email_verified && !user.is_admin) {
-  return res.status(403).json({ ok:false, message:'Bitte bestätige zuerst deine E-Mail-Adresse.' });
-}
+      return res.status(403).json({ ok:false, message:'Bitte bestätige zuerst deine E-Mail-Adresse.' });
+    }
 
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ ok: false, message: 'Login fehlgeschlagen' });
@@ -103,7 +104,9 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// === SIGNUP mit Double-Opt-In ===
+// ============================================================
+// SIGNUP (mit Double-Opt-In über Brevo)
+// ============================================================
 router.post('/signup', async (req, res) => {
   const emailRaw = String(req.body?.email || '').trim().toLowerCase();
   const passRaw = String(req.body?.password || '');
@@ -124,31 +127,21 @@ router.post('/signup', async (req, res) => {
     const base = process.env.PUBLIC_BASE_URL || req.headers.origin || `${req.protocol}://${req.get('host')}`;
     const verifyUrl = `${base}/verify?token=${verifyToken}`;
 
-    // Mail versenden
-    if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: false, // wichtig: KEIN true, sonst macht er SSL direkt!
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        },
-        tls: {
-          rejectUnauthorized: false // sonst zickt localhost rum
-        }
-      });
-
-      await transporter.sendMail({
-        from: process.env.MAIL_FROM || process.env.SMTP_USER,
+    // === Brevo-Mailversand ===
+    try {
+      await sendMail({
         to: emailRaw,
-        subject: 'Poker Joker – E-Mail bestätigen',
-        text: `Hey! Bitte bestätige deine E-Mail-Adresse mit diesem Link:\n\n${verifyUrl}\n\nViel Spaß beim Zocken!\nDein Poker Joker 🤡🃏`
-      }).then(() => {
-        console.log('[VERIFY] Bestätigungsmail gesendet an:', emailRaw);
-      }).catch(err => {
-        console.error('[MAIL ERROR]', err.message || err);
+        subject: 'Bitte bestätige deine E-Mail',
+        html: `
+          <h2>Willkommen bei Poker Joker 🃏</h2>
+          <p>Klicke auf den folgenden Link, um deine E-Mail zu bestätigen:</p>
+          <p><a href="${verifyUrl}" target="_blank">${verifyUrl}</a></p>
+          <p>Viel Spaß!<br>Dein Poker Joker Team</p>
+        `
       });
+      console.log('[VERIFY] ✅ Bestätigungsmail gesendet an:', emailRaw);
+    } catch (mailErr) {
+      console.error('[VERIFY] ⚠️ Fehler beim Mailversand:', mailErr.message);
     }
 
     return res.json({ ok: true, message: 'verification_email_sent' });
@@ -162,7 +155,9 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// === FORGOT PASSWORD ===
+// ============================================================
+// FORGOT PASSWORD (Brevo)
+// ============================================================
 router.post('/forgot', async (req, res) => {
   try {
     await ensureTables();
@@ -181,11 +176,8 @@ router.post('/forgot', async (req, res) => {
 
     await pool.query(`
       UPDATE public.password_resets
-         SET used = true,
-             used_at = NOW()
-       WHERE user_id = $1
-         AND used = false
-         AND used_at IS NULL
+         SET used = true, used_at = NOW()
+       WHERE user_id = $1 AND used = false AND used_at IS NULL
     `, [user.id]);
 
     const ipStr = (req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || '').trim();
@@ -200,32 +192,23 @@ router.post('/forgot', async (req, res) => {
 
     const base = process.env.PUBLIC_BASE_URL || req.headers.origin || `${req.protocol}://${req.get('host')}`;
     const resetUrl = `${base}/login/reset.html?token=${raw}`;
-    console.log(`[FORGOT] reset_id=${ins.rows[0].id} user=${user.email} ip=${ipStr} link=${resetUrl}`);
+    console.log(`[FORGOT] reset_id=${ins.rows[0].id} user=${user.email} link=${resetUrl}`);
 
+    // === Brevo-Mailversand ===
     try {
-      if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT || 587),
-          secure: !!process.env.SMTP_SECURE,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          },
-          tls: {
-            rejectUnauthorized: false
-          }
-        });
-
-        await transporter.sendMail({
-          from: process.env.MAIL_FROM || process.env.SMTP_USER,
-          to: user.email,
-          subject: 'Passwort-Zurücksetzen',
-          text: `Link (60 Min gültig): ${resetUrl}`
-        });
-      }
+      await sendMail({
+        to: user.email,
+        subject: 'Poker Joker – Passwort zurücksetzen',
+        html: `
+          <h2>Passwort zurücksetzen</h2>
+          <p>Klicke auf den folgenden Link, um dein Passwort neu zu setzen (gültig für 60 Minuten):</p>
+          <p><a href="${resetUrl}" target="_blank">${resetUrl}</a></p>
+          <p>Wenn du das nicht warst, kannst du diese E-Mail ignorieren.</p>
+        `
+      });
+      console.log('[FORGOT] ✅ Reset-Mail gesendet an:', user.email);
     } catch (mailErr) {
-      console.warn('[FORGOT] mail error:', mailErr.message);
+      console.warn('[FORGOT] ⚠️ Reset-Mail Fehler:', mailErr.message);
     }
 
     return res.json({ ok: true });
@@ -235,19 +218,25 @@ router.post('/forgot', async (req, res) => {
   }
 });
 
-// === LOGOUT ===
+// ============================================================
+// LOGOUT
+// ============================================================
 router.post('/logout', (req, res) => {
   res.clearCookie('session', { path: '/' });
   res.json({ ok: true });
 });
 
-// === GET /me ===
+// ============================================================
+// /me
+// ============================================================
 const requireAuth = require('../middleware/requireAuth');
 router.get('/me', requireAuth, (req, res) => {
   res.json({ id: req.user.id });
 });
 
-// === PASSWORD ÄNDERN ===
+// ============================================================
+// PASSWORD CHANGE
+// ============================================================
 router.post('/password', requireAuth, async (req, res) => {
   try {
     const uid = req.user.id;
@@ -272,36 +261,35 @@ router.post('/password', requireAuth, async (req, res) => {
   }
 });
 
-// === VERIFY ===
+// ============================================================
+// VERIFY
+// ============================================================
 router.get('/verify', async (req, res) => {
   const token = req.query.token;
   if (!token) return res.status(400).send('Token fehlt');
 
   try {
     const q = await pool.query(`
-  UPDATE public.users
-     SET email_verified = true,
-         verify_token = NULL
-   WHERE verify_token = $1
-     AND email_verified = false
-  RETURNING id
-`, [token]);
+      UPDATE public.users
+         SET email_verified = true, verify_token = NULL
+       WHERE verify_token = $1 AND email_verified = false
+       RETURNING id
+    `, [token]);
 
-if (!q.rowCount) {
-  return res.send('<h1>Link ungültig oder bereits verwendet</h1>');
-}
+    if (!q.rowCount) {
+      return res.send('<h1>Link ungültig oder bereits verwendet</h1>');
+    }
 
-const userId = q.rows[0].id;
+    const userId = q.rows[0].id;
 
-// Willkommensbonus gutschreiben
-await pool.query(`
-  INSERT INTO token_ledger (user_id, delta, reason)
-  VALUES ($1, $2, 'welcome_bonus')
-`, [userId, WELCOME_TOKENS]);
+    await pool.query(`
+      INSERT INTO token_ledger (user_id, delta, reason)
+      VALUES ($1, $2, 'welcome_bonus')
+    `, [userId, WELCOME_TOKENS]);
 
-await pool.query(`
-  UPDATE users SET tokens = tokens + $1 WHERE id = $2
-`, [WELCOME_TOKENS, userId]);
+    await pool.query(`
+      UPDATE users SET tokens = tokens + $1 WHERE id = $2
+    `, [WELCOME_TOKENS, userId]);
 
     console.log(`[VERIFY] Account bestätigt & ${WELCOME_TOKENS} Tokens gutgeschrieben (User ID ${userId})`);
     res.send('<h2 style="font-family:sans-serif;color:green;">✅ E-Mail bestätigt! Du kannst dich jetzt einloggen.</h2><a href="/login">Zum Login</a>');

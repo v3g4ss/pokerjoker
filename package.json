@@ -1,6 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -11,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@getbrevo/brevo": "^3.0.1",
     "@paypal/checkout-server-sdk": "^1.0.3",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
@@ -21,7 +23,6 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
-    "nodemailer": "^7.0.5",
     "openai": "^4.104.0",
     "pdf-parse": "^1.1.1",
     "pg": "^8.16.3",

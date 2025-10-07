@@ -1,26 +1,18 @@
-// routes/password.js
+// ============================================================
+// routes/password.js (Brevo clean version)
+// ============================================================
+
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const nodemailer = require('nodemailer');
 const { pool } = require('../db');
+const { sendMail } = require('../utils/mailer'); // <— Brevo-Mailer
 
 // --- Helpers ---
 const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
 
-function makeTransport() {
-  const secureByPort = String(process.env.SMTP_PORT) === '465';
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: (process.env.SMTP_SECURE === 'true') || secureByPort,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    tls: { rejectUnauthorized: false },
-  });
-}
-
-// Optional – nur falls Tabelle fehlt (sonst No-Op)
+// Optional – Tabelle absichern
 async function ensureTables() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.password_resets (
@@ -39,7 +31,7 @@ async function ensureTables() {
   `);
 }
 
-// --- 1) Reset-Link anfordern (keine User-Enumeration) ---
+// --- 1) Reset-Link anfordern ---
 router.post('/request', async (req, res) => {
   const client = await pool.connect();
   try {
@@ -51,57 +43,54 @@ router.post('/request', async (req, res) => {
       `SELECT id, email FROM public.users WHERE LOWER(email) = $1 LIMIT 1`,
       [email]
     );
+
     if (!u.rows[0]) {
-      // Immer "ok", um Enumeration zu vermeiden
+      // Keine Enumeration
       return res.json({ ok: true, message: 'Wenn die E-Mail existiert, wurde ein Link verschickt.' });
     }
 
-    const userId   = u.rows[0].id;
-    const token    = crypto.randomBytes(24).toString('hex');
-    const tokenHash= sha256(token);
+    const userId = u.rows[0].id;
+    const token = crypto.randomBytes(24).toString('hex');
+    const tokenHash = sha256(token);
 
-    // --- Transaktion: offenen Reset löschen -> neuen anlegen ---
     await client.query('BEGIN');
     await client.query(
-      `DELETE FROM public.password_resets
-       WHERE user_id = $1 AND used_at IS NULL`,
+      `DELETE FROM public.password_resets WHERE user_id = $1 AND used_at IS NULL`,
       [userId]
     );
     await client.query(
       `INSERT INTO public.password_resets
          (user_id, token_hash, expires_at, request_ip, request_ua, request_email)
-       VALUES
-         ($1, $2, NOW() + INTERVAL '60 minutes', $3, $4, $5)`,
-       [userId, tokenHash, req.ip, req.headers['user-agent'] || null, email]
+       VALUES ($1, $2, NOW() + INTERVAL '60 minutes', $3, $4, $5)`,
+      [userId, tokenHash, req.ip, req.headers['user-agent'] || null, email]
     );
     await client.query('COMMIT');
 
     const base = `${req.protocol}://${req.get('host')}`;
     const link = `${base}/login/reset.html?token=${encodeURIComponent(token)}`;
 
-    // Mail versenden (mit sauberem Return-Path)
+    // === Brevo-Mailversand ===
     try {
-      const t = makeTransport();
-      await t.sendMail({
-        from:    process.env.MAIL_FROM || process.env.SMTP_USER,    // Header-From
-        to:      u.rows[0].email,
-        replyTo: process.env.MAIL_FROM || process.env.SMTP_USER,
-        envelope: { from: process.env.SMTP_USER, to: u.rows[0].email }, // Return-Path
+      await sendMail({
+        to: u.rows[0].email,
         subject: 'Poker Joker – Passwort zurücksetzen',
-        text:    `Hi! Hier ist dein Link (60 Min. gültig): ${link}`,
-        html:    `<p>Hi!</p><p>Hier ist dein Link (60 Min. gültig):</p><p><a href="${link}">${link}</a></p>`
+        html: `
+          <h2>Passwort zurücksetzen</h2>
+          <p>Klicke auf den folgenden Link, um dein Passwort neu zu setzen (gültig 60 Minuten):</p>
+          <p><a href="${link}" target="_blank">${link}</a></p>
+          <p>Wenn du das nicht warst, kannst du diese E-Mail ignorieren.</p>
+        `
       });
+      console.log('[RESET] ✅ Mail gesendet an:', u.rows[0].email);
       return res.json({ ok: true, message: 'Link verschickt.' });
     } catch (err) {
-  console.error('SMTP error', err);
-  // Dev-Fallback: Link nur im Development zurückgeben + loggen
-  if (process.env.NODE_ENV === 'development') {
-    console.log('DEV Reset-Link:', link);
-    return res.json({ ok: true, message: 'Link erzeugt (Mail fehlgeschlagen).', link });
-  }
-  // In Prod keinen Link leaken
-  return res.json({ ok: true, message: 'Link erzeugt.' });
-}
+      console.warn('[RESET] ⚠️ Mailversand fehlgeschlagen:', err.message);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('DEV Reset-Link:', link);
+        return res.json({ ok: true, message: 'Mail fehlgeschlagen, Link in Dev-Log.' });
+      }
+      return res.json({ ok: true, message: 'Link erzeugt.' });
+    }
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch {}
     console.error('POST /api/password/request', err);
