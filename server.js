@@ -1,28 +1,25 @@
-// =========================== server.js (clean Brevo version) ===========================
+// =========================== server.js (CommonJS + Brevo clean) ===========================
 
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
-import cookieParser from 'cookie-parser';
-import jwt from 'jsonwebtoken';
-import http from 'http';
-import { fileURLToPath } from 'url';
-import { pool } from './db.js';
-import { sendMail } from './utils/mailer.js';
-import requireAuth from './middleware/requireAuth.js';
-import requireAdmin from './middleware/requireAdmin.js';
+// --- Imports ---
+const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+const path = require('path');
+const cookieParser = require('cookie-parser');
+const jwt = require('jsonwebtoken');
+const http = require('http');
+const { pool } = require('./db');
+const { sendMail } = require('./utils/mailer');
+const requireAuth = require('./middleware/requireAuth');
+const requireAdmin = require('./middleware/requireAdmin');
 
-dotenv.config();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+// --- App ---
 const app = express();
 app.set('trust proxy', 1);
 
 // --- Stripe Webhook ---
-import * as pay from './routes/pay.js';
-import paypalRouter from './routes/paypal.js';
+const pay = require('./routes/pay');
+const paypalRouter = require('./routes/paypal');
 app.post(
   '/api/pay/stripe/webhook',
   express.raw({ type: 'application/json' }),
@@ -47,12 +44,12 @@ app.use('/api/pay', pay.router);
 app.use('/api/pay', paypalRouter);
 
 // --- Admin APIs ---
-import adminMenuRoutes from './routes/admin-menu.js';
-import adminPromptRoutes from './routes/admin-prompt.js';
-import adminRoutes from './routes/admin.js';
-import adminBotRoutes from './routes/admin-bot.js';
-import adminKbRoutes from './routes/admin-kb.js';
-import adminMessagesRoutes from './routes/admin-messages.js';
+const adminMenuRoutes = require('./routes/admin-menu');
+const adminPromptRoutes = require('./routes/admin-prompt');
+const adminRoutes = require('./routes/admin');
+const adminBotRoutes = require('./routes/admin-bot');
+const adminKbRoutes = require('./routes/admin-kb');
+const adminMessagesRoutes = require('./routes/admin-messages');
 
 app.use('/api/admin', adminPromptRoutes);
 app.use('/api/admin', adminRoutes);
@@ -62,12 +59,12 @@ app.use('/api/admin', adminMessagesRoutes);
 app.use('/api/admin', adminMenuRoutes);
 
 // --- User APIs ---
-import chatRoutes from './routes/chat.js';
-import menuRoutes from './routes/menu.js';
-import messagesRoutes from './routes/messages.js';
-import tokensRoutes from './routes/tokens.js';
-import authRouter from './routes/auth.js';
-import passwordRouter from './routes/password.js';
+const chatRoutes = require('./routes/chat');
+const menuRoutes = require('./routes/menu');
+const messagesRoutes = require('./routes/messages');
+const tokensRoutes = require('./routes/tokens');
+const authRouter = require('./routes/auth');
+const passwordRouter = require('./routes/password');
 
 app.use('/api', chatRoutes);
 app.use('/api', menuRoutes);
