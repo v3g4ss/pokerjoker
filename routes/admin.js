@@ -582,14 +582,15 @@ router.post('/messages/:id/reply', async (req, res) => {
       )
     `);
 
-    // optional Mail senden (nicht fatal, wenn es fehlschlägt)
+    // optional Mail senden (Brevo API)
     try {
-      await req.app?.locals?.transporter?.sendMail({
-        from: process.env.SMTP_USER || 'no-reply@localhost',
-        to, subject, text: body
+      await sendMailBrevo({
+        to,
+        subject,
+        text: body
       });
     } catch (mailErr) {
-      console.warn('[reply] sendMail failed:', mailErr.message);
+      console.warn('[reply] Brevo-Mail failed:', mailErr.message);
     }
 
     // Reply speichern
