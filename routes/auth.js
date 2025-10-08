@@ -159,7 +159,7 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-console.log('[VERIFY LINK]', verifyLink);
+
 
 // ============================================================
 // FORGOT PASSWORD (Brevo)
@@ -223,6 +223,8 @@ router.post('/forgot', async (req, res) => {
     return res.status(500).json({ ok: false, message: 'Serverfehler' });
   }
 });
+
+console.log('[VERIFY LINK]', verifyLink);
 
 // ============================================================
 // LOGOUT
