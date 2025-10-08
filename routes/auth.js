@@ -224,7 +224,6 @@ router.post('/forgot', async (req, res) => {
   }
 });
 
-console.log('[VERIFY LINK]', verifyLink);
 
 // ============================================================
 // LOGOUT
