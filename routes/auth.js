@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const { pool } = require('../db');
-const { sendMail } = require('../utils/mailer'); // <— Brevo-Mailer nutzen
+const { sendMailSafe: sendMail } = require('../utils/mailer'); // <— Brevo-Mailer nutzen
 
 const SALT_ROUNDS = 10;
 const WELCOME_TOKENS = Number(process.env.WELCOME_TOKENS || 1000);
@@ -111,7 +111,7 @@ router.post('/signup', async (req, res) => {
   const emailRaw = String(req.body?.email || '').trim().toLowerCase();
   const passRaw = String(req.body?.password || '');
 
-  if (!emailRaw || passRaw.length < 6) {
+  if (!emailRaw || !passRaw || passRaw.length < 6) {
     return res.status(400).json({ ok: false, message: 'email_or_password_invalid' });
   }
 
@@ -119,27 +119,31 @@ router.post('/signup', async (req, res) => {
     const hash = await bcrypt.hash(passRaw, SALT_ROUNDS);
     const verifyToken = crypto.randomBytes(32).toString('hex');
 
-    await pool.query(`
+    const ins = await pool.query(`
       INSERT INTO public.users (email, password, is_admin, tokens, purchased, created_at, email_verified, verify_token)
       VALUES ($1, $2, false, 0, 0, NOW(), false, $3)
+      RETURNING id
     `, [emailRaw, hash, verifyToken]);
 
+    const userId = ins.rows[0].id;
     const base = process.env.PUBLIC_BASE_URL || req.headers.origin || `${req.protocol}://${req.get('host')}`;
-    const verifyUrl = `${base}/verify?token=${verifyToken}`;
+    const verifyLink = `${base}/verify?token=${verifyToken}`;
 
-    // === Brevo-Mailversand ===
     try {
       await sendMail({
         to: emailRaw,
-        subject: 'Bitte bestätige deine E-Mail',
+        subject: 'Poker Joker – bitte bestätige deine E-Mail-Adresse',
         html: `
-          <h2>Willkommen bei Poker Joker 🃏</h2>
-          <p>Klicke auf den folgenden Link, um deine E-Mail zu bestätigen:</p>
-          <p><a href="${verifyUrl}" target="_blank">${verifyUrl}</a></p>
-          <p>Viel Spaß!<br>Dein Poker Joker Team</p>
+          <div style="font-family:sans-serif;line-height:1.5">
+            <h2>Willkommen bei Poker Joker 🤡</h2>
+            <p>Bitte bestätige deine E-Mail-Adresse, um loszulegen:</p>
+            <p><a href="${verifyLink}" style="background:#ff6f00;color:white;
+                padding:10px 20px;border-radius:6px;text-decoration:none;">
+                Jetzt bestätigen</a></p>
+          </div>
         `
       });
-      console.log('[VERIFY] ✅ Bestätigungsmail gesendet an:', emailRaw);
+      console.log('[VERIFY] ✅ Brevo-Mail gesendet an:', emailRaw);
     } catch (mailErr) {
       console.error('[VERIFY] ⚠️ Fehler beim Mailversand:', mailErr.message);
     }
@@ -154,6 +158,8 @@ router.post('/signup', async (req, res) => {
     return res.status(500).json({ ok: false, message: 'signup_failed' });
   }
 });
+
+console.log('[VERIFY LINK]', verifyLink);
 
 // ============================================================
 // FORGOT PASSWORD (Brevo)
