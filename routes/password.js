@@ -7,7 +7,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { pool } = require('../db');
-const { sendMail } = require('../utils/mailer'); // <— Brevo-Mailer
+const { sendMailSafe: sendMail } = require('../utils/mailer'); // <— Brevo-Mailer
 
 // --- Helpers ---
 const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
@@ -71,34 +71,27 @@ router.post('/request', async (req, res) => {
 
     // === Brevo-Mailversand ===
     try {
-      await sendMail({
+      await sendMailSafe({
         to: u.rows[0].email,
-        subject: 'Poker Joker – Passwort zurücksetzen',
-        html: `
-          <h2>Passwort zurücksetzen</h2>
-          <p>Klicke auf den folgenden Link, um dein Passwort neu zu setzen (gültig 60 Minuten):</p>
-          <p><a href="${link}" target="_blank">${link}</a></p>
-          <p>Wenn du das nicht warst, kannst du diese E-Mail ignorieren.</p>
-        `
+        subject: 'Poker Joker 🃏 Passwort zurücksetzen',
+        html: `<p>Klick hier, um dein Passwort zurückzusetzen:</p>
+              <a href="${resetLink}">${resetLink}</a>`
       });
+
       console.log('[RESET] ✅ Mail gesendet an:', u.rows[0].email);
       return res.json({ ok: true, message: 'Link verschickt.' });
+
     } catch (err) {
       console.warn('[RESET] ⚠️ Mailversand fehlgeschlagen:', err.message);
+
+      // DEV fallback – damit du testweise trotzdem weiterkommst
       if (process.env.NODE_ENV === 'development') {
-        console.log('DEV Reset-Link:', link);
+        console.log('DEV Reset-Link:', resetLink);
         return res.json({ ok: true, message: 'Mail fehlgeschlagen, Link in Dev-Log.' });
       }
-      return res.json({ ok: true, message: 'Link erzeugt.' });
+
+      return res.json({ ok: false, message: 'Mailversand fehlgeschlagen.' });
     }
-  } catch (err) {
-    try { await client.query('ROLLBACK'); } catch {}
-    console.error('POST /api/password/request', err);
-    res.status(500).json({ ok: false, message: 'Serverfehler' });
-  } finally {
-    client.release();
-  }
-});
 
 // --- 2) Token prüfen ---
 router.get('/check', async (req, res) => {
