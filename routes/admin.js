@@ -289,9 +289,10 @@ router.post('/users', requireAuth, requireAdmin, async (req, res) => {
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
 
     const ins = await pool.query(
-      `INSERT INTO public.users (email, password, is_admin, is_locked, tokens, purchased, created_at, updated_at)
-       VALUES ($1,$2,$3,false,0,0,NOW(),NOW())
-       RETURNING id, email, is_admin, is_locked`,
+      `INSERT INTO public.users 
+        (email, password, is_admin, is_locked, tokens, purchased, created_at, updated_at, email_verified)
+      VALUES ($1,$2,$3,false,0,0,NOW(),NOW(),true)
+      RETURNING id, email, is_admin, is_locked, email_verified`,
       [email, hash, is_admin]
     );
 

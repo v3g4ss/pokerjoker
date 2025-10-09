@@ -10,7 +10,29 @@
       background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
       min-height: 100vh; display: grid; place-items: center; margin: 0; color: #eee;
     }
-    .card { width: min(420px, 92vw); background: #11182a; border-radius: 16px; box-shadow: 0 12px 30px rgba(0,0,0,.35); padding: 24px; }
+    nav.menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      background: rgba(0,0,0,0.4);
+      padding: 10px 0;
+      backdrop-filter: blur(8px);
+      z-index: 999;
+    }
+    nav.menu a {
+      color: #ffd600;
+      text-decoration: none;
+      font-weight: 600;
+      transition: 0.2s;
+    }
+    nav.menu a:hover {
+      color: #ff4d00;
+    }
+    .card { width: min(420px, 92vw); background: #11182a; border-radius: 16px; box-shadow: 0 12px 30px rgba(0,0,0,.35); padding: 24px; margin-top: 80px; }
     .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
     .tabs button { flex: 1; padding: 10px; border: 0; border-radius: 12px; background: #19213a; color: #eee; cursor: pointer; }
     .tabs button.active { background: #223058; outline: 2px solid #ffd600; }
@@ -148,6 +170,26 @@ signupForm?.addEventListener('submit', async (e) => {
 });
 
 showLogin();
+</script>
+
+<!-- 🔥 Dynamisches Menü laden -->
+<script>
+(async () => {
+  try {
+    const res = await fetch('/api/admin-menu/public');
+    const d = await res.json();
+    if (d.ok && d.items?.length) {
+      const nav = document.createElement('nav');
+      nav.className = 'menu';
+      nav.innerHTML = d.items
+        .map(i => `<a href="${i.slug}" class="menu-item">${i.title}</a>`)
+        .join('');
+      document.body.prepend(nav);
+    }
+  } catch (err) {
+    console.warn('Menü-Fehler (Login):', err);
+  }
+})();
 </script>
 
 </body>

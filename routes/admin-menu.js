@@ -6,13 +6,13 @@ const requireAuth  = require('../middleware/requireAuth');
 const requireAdmin = require('../middleware/requireAdmin');
 const { pool }     = require('../db');
 
-// --- Handler (einmal definieren, für beide Pfad-Präfixe registrieren) ---
+// === Handler ===
 const listItems = async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM menu_items ORDER BY id');
     res.json({ ok: true, items: result.rows });
   } catch (err) {
-    console.error('Fehler beim Laden der Menüeinträge:', err);
+    console.error('[ADMIN MENU] Fehler beim Laden:', err);
     res.status(500).json({ ok: false, error: 'Fehler beim Laden' });
   }
 };
@@ -38,7 +38,7 @@ const createItem = async (req, res) => {
     );
     res.json({ ok: true, item: result.rows[0] });
   } catch (err) {
-    console.error('Fehler beim Hinzufügen:', err);
+    console.error('[ADMIN MENU] Fehler beim Hinzufügen:', err);
     res.status(500).json({ ok: false, error: 'Fehler beim Speichern' });
   }
 };
@@ -58,7 +58,7 @@ const updateItem = async (req, res) => {
     );
     res.json({ ok: true });
   } catch (err) {
-    console.error('Fehler beim Aktualisieren:', err);
+    console.error('[ADMIN MENU] Fehler beim Aktualisieren:', err);
     res.status(500).json({ ok: false, error: 'Fehler beim Update' });
   }
 };
@@ -68,21 +68,36 @@ const deleteItem = async (req, res) => {
     await pool.query('DELETE FROM menu_items WHERE id = $1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
-    console.error('Fehler beim Löschen:', err);
+    console.error('[ADMIN MENU] Fehler beim Löschen:', err);
     res.status(500).json({ ok: false, error: 'Fehler beim Löschen' });
   }
 };
 
-// --- Routen unter /editor (bestehend) ---
+// === Admin-Routen ===
 router.get   ('/editor',      requireAuth, requireAdmin, listItems);
 router.post  ('/editor',      requireAuth, requireAdmin, createItem);
 router.put   ('/editor/:id',  requireAuth, requireAdmin, updateItem);
 router.delete('/editor/:id',  requireAuth, requireAdmin, deleteItem);
 
-// --- Alias unter /menu (für bestehendes Frontend) ---
 router.get   ('/menu',        requireAuth, requireAdmin, listItems);
 router.post  ('/menu',        requireAuth, requireAdmin, createItem);
 router.put   ('/menu/:id',    requireAuth, requireAdmin, updateItem);
 router.delete('/menu/:id',    requireAuth, requireAdmin, deleteItem);
+
+// === Öffentliche Route für Login-Seite ===
+router.get('/public', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT * FROM menu_items
+      WHERE is_active = true
+      AND (location = 'login' OR location = 'both')
+      ORDER BY position, id
+    `);
+    res.json({ ok: true, items: result.rows });
+  } catch (err) {
+    console.error('[ADMIN MENU PUBLIC ERROR]', err);
+    res.status(500).json({ ok: false, error: 'Fehler beim Laden des Menüs' });
+  }
+});
 
 module.exports = router;

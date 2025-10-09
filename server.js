@@ -9,7 +9,7 @@ const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const http = require('http');
 const { pool } = require('./db');
-const { sendMail } = require('./utils/mailer');
+const { sendMailSafe: sendMail } = require('../utils/mailer');
 const requireAuth = require('./middleware/requireAuth');
 const requireAdmin = require('./middleware/requireAdmin');
 
