@@ -7,7 +7,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { pool } = require('../db');
-const { sendMailSafe: sendMail } = require('../utils/mailer'); // <— Brevo-Mailer
+const { sendMailSafe: sendMail } = require('../utils/mailer'); // <- Brevo-Mailer
 
 // --- Helpers ---
 const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
@@ -71,11 +71,11 @@ router.post('/request', async (req, res) => {
 
     // === Brevo-Mailversand ===
     try {
-      await sendMailSafe({
+      await sendMail({
         to: u.rows[0].email,
         subject: 'Poker Joker 🃏 Passwort zurücksetzen',
         html: `<p>Klick hier, um dein Passwort zurückzusetzen:</p>
-              <a href="${resetLink}">${resetLink}</a>`
+               <a href="${link}">${link}</a>`
       });
 
       console.log('[RESET] ✅ Mail gesendet an:', u.rows[0].email);
@@ -86,12 +86,21 @@ router.post('/request', async (req, res) => {
 
       // DEV fallback – damit du testweise trotzdem weiterkommst
       if (process.env.NODE_ENV === 'development') {
-        console.log('DEV Reset-Link:', resetLink);
+        console.log('DEV Reset-Link:', link);
         return res.json({ ok: true, message: 'Mail fehlgeschlagen, Link in Dev-Log.' });
       }
 
       return res.json({ ok: false, message: 'Mailversand fehlgeschlagen.' });
     }
+
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    console.error('POST /api/password/request', err);
+    res.status(500).json({ ok: false, message: 'Serverfehler' });
+  } finally {
+    client.release();
+  }
+});
 
 // --- 2) Token prüfen ---
 router.get('/check', async (req, res) => {
