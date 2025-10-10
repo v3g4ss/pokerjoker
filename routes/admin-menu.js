@@ -6,10 +6,13 @@ const requireAuth  = require('../middleware/requireAuth');
 const requireAdmin = require('../middleware/requireAdmin');
 const { pool }     = require('../db');
 
-// === Handler ===
+// === Menü-Einträge laden ===
 const listItems = async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM menu_items ORDER BY id');
+    const result = await pool.query(`
+      SELECT * FROM menu_items
+      ORDER BY position, id
+    `);
     res.json({ ok: true, items: result.rows });
   } catch (err) {
     console.error('[ADMIN MENU] Fehler beim Laden:', err);
@@ -17,6 +20,7 @@ const listItems = async (req, res) => {
   }
 };
 
+// === Menüpunkt hinzufügen ===
 const createItem = async (req, res) => {
   const {
     title = 'Neuer Punkt',
@@ -43,6 +47,7 @@ const createItem = async (req, res) => {
   }
 };
 
+// === Menüpunkt bearbeiten ===
 const updateItem = async (req, res) => {
   const { title, position, content_html, location, is_active } = req.body || {};
   try {
@@ -63,6 +68,7 @@ const updateItem = async (req, res) => {
   }
 };
 
+// === Menüpunkt löschen ===
 const deleteItem = async (req, res) => {
   try {
     await pool.query('DELETE FROM menu_items WHERE id = $1', [req.params.id]);
@@ -73,16 +79,12 @@ const deleteItem = async (req, res) => {
   }
 };
 
-// === Admin-Routen ===
-router.get   ('/editor',      requireAuth, requireAdmin, listItems);
-router.post  ('/editor',      requireAuth, requireAdmin, createItem);
-router.put   ('/editor/:id',  requireAuth, requireAdmin, updateItem);
-router.delete('/editor/:id',  requireAuth, requireAdmin, deleteItem);
-
-router.get   ('/menu',        requireAuth, requireAdmin, listItems);
-router.post  ('/menu',        requireAuth, requireAdmin, createItem);
-router.put   ('/menu/:id',    requireAuth, requireAdmin, updateItem);
-router.delete('/menu/:id',    requireAuth, requireAdmin, deleteItem);
+// === Admin-Menü (Dashboard) ===
+// Kein requireAdmin, da Dashboard bereits geschützt ist
+router.get   ('/menu',        requireAuth, listItems);
+router.post  ('/menu',        requireAuth, createItem);
+router.put   ('/menu/:id',    requireAuth, updateItem);
+router.delete('/menu/:id',    requireAuth, deleteItem);
 
 // === Öffentliche Route für Login-Seite ===
 router.get('/public', async (req, res) => {
