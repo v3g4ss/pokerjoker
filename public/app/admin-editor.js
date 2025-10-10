@@ -1,15 +1,23 @@
 // public/app/admin-editor.js
-// 🃏 Poker Joker: Prompt UI erweitert mit punctRate + maxUsedTokens
+// 🃏 Poker Joker: Prompt UI + Menüverwaltung (punctRate + maxUsedTokens)
 
 document.addEventListener('DOMContentLoaded', () => {
+
+  // === Menüeinträge laden ===
   async function loadMenuItems() {
-  const res = await fetch('/api/admin/editor', { credentials: 'include' });
-  const data = await res.json();
-  const tbody = document.querySelector('#menuItemsTable tbody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-  (data.items || []).forEach(drawRow); // drawRow existiert schon
-}
+    try {
+      const res = await fetch('./api/admin/menu', { credentials: 'include' });
+      const data = await res.json();
+      const tbody = document.querySelector('#menuItemsTable tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      (data.items || []).forEach(drawRow);
+    } catch (err) {
+      console.error('[MENU LOAD ERROR]', err);
+    }
+  }
+
+  // === DOM-Elemente holen ===
   const promptTextarea = document.getElementById('admPrompt');
   const tempInput      = document.getElementById('admTemp');
   const modelSelect    = document.getElementById('admModel');
@@ -23,12 +31,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const punctInput     = document.getElementById('punctRate');
   const maxTokInput    = document.getElementById('maxUsedTokens');
 
-  const tableBody  = document.querySelector('#mnTable tbody');
+  const tableBody  = document.querySelector('#menuItemsTable tbody');
   const addBtn     = document.getElementById('mnAdd');
   let addLocked    = false;
 
   if (!promptTextarea || !tempInput || !modelSelect || !testBtn || !saveBtn) return;
 
+  // === Hilfsfunktion für API ===
   async function api(url, options = {}) {
     const opts = {
       credentials: 'include',
@@ -49,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
       modelSelect.value    = j.model;
       punctInput.value     = j.punct_rate ?? 1;
       maxTokInput.value    = j.max_usedtokens_per_msg ?? 1000;
+
       // ChatMode setzen
       if (j.knowledge_mode) {
         const b = Array.from(modeButtons).find(x => x.value === j.knowledge_mode);
@@ -116,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // === Menü initialisieren ===
   if (!window.mnMenuInitDone) {
     window.mnMenuInitDone = true;
     addBtn?.addEventListener('click', createMenuItem);
@@ -125,13 +136,14 @@ document.addEventListener('DOMContentLoaded', () => {
   loadPromptSettings();
 });
 
-// === Menüpunkt-Erstellung auslagern ===
+
+// === Menüpunkt-Erstellung ===
 async function createMenuItem() {
-  if (addLocked) return;
-  addLocked = true;
+  if (window.addLocked) return;
+  window.addLocked = true;
 
   try {
-    const j = await fetch('/api/admin/editor', {
+    const j = await fetch('./api/admin/menu', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -144,18 +156,44 @@ async function createMenuItem() {
       })
     }).then(res => res.json());
 
-    addLocked = false;
+    window.addLocked = false;
 
     if (j.ok && j.item) {
-      statusSpan.textContent = 'Gespeichert ✅';
       drawRow(j.item);
     } else {
-      statusSpan.textContent = 'Fehler beim Speichern ⚠️';
       console.error(j.error || j);
     }
   } catch (err) {
-    addLocked = false;
-    console.error(err);
-    statusSpan.textContent = 'Fehler beim Speichern ⚠️';
+    window.addLocked = false;
+    console.error('[CREATE MENU ERROR]', err);
   }
+}
+
+
+// === Menüzeile darstellen ===
+function drawRow(item) {
+  const tbody = document.querySelector('#menuItemsTable tbody');
+  if (!tbody) return;
+
+  const tr = document.createElement('tr');
+  tr.dataset.id = item.id;
+
+  tr.innerHTML = `
+    <td>${item.id}</td>
+    <td><input type="text" value="${item.title || ''}" class="mn-title" /></td>
+    <td>
+      <select class="mn-location">
+        <option value="login" ${item.location === 'login' ? 'selected' : ''}>Login</option>
+        <option value="live" ${item.location === 'live' ? 'selected' : ''}>Live</option>
+        <option value="both" ${item.location === 'both' ? 'selected' : ''}>Beide</option>
+      </select>
+    </td>
+    <td><input type="checkbox" class="mn-active" ${item.is_active ? 'checked' : ''} /></td>
+    <td>
+      <button class="btn-edit" data-id="${item.id}">✏️</button>
+      <button class="btn-delete" data-id="${item.id}">🗑️</button>
+    </td>
+  `;
+
+  tbody.appendChild(tr);
 }

@@ -176,7 +176,7 @@ showLogin();
 <script>
 (async () => {
   try {
-    const res = await fetch('/api/admin-menu/public');
+    const res = await fetch('./api/menu?location=login');
     const d = await res.json();
     if (d.ok && d.items?.length) {
       const nav = document.createElement('nav');
