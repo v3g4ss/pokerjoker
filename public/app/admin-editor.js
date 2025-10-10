@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch('/api/admin/menu', { credentials: 'include' });
       const data = await res.json();
-      const tbody = document.querySelector('#mnTable tbody');
+      const tbody = document.querySelector('#menuItemsTable tbody');
       if (!tbody) return;
       tbody.innerHTML = '';
       (data.items || []).forEach(drawRow);
@@ -31,9 +31,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const punctInput     = document.getElementById('punctRate');
   const maxTokInput    = document.getElementById('maxUsedTokens');
 
-  const tableBody  = document.querySelector('#menuItemsTable tbody');
-  const addBtn     = document.getElementById('mnAdd');
-  let addLocked    = false;
+  const addBtn = document.getElementById('mnAdd');
+  let addLocked = false;
 
   if (!promptTextarea || !tempInput || !modelSelect || !testBtn || !saveBtn) return;
 
@@ -130,12 +129,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!window.mnMenuInitDone) {
     window.mnMenuInitDone = true;
     addBtn?.addEventListener('click', createMenuItem);
+    document.querySelector('#menuItemsTable')?.addEventListener('click', onMenuClick);
     loadMenuItems();
   }
 
   loadPromptSettings();
 });
-
 
 // === Menüpunkt-Erstellung ===
 async function createMenuItem() {
@@ -143,7 +142,7 @@ async function createMenuItem() {
   window.addLocked = true;
 
   try {
-   const j = await fetch('/api/admin/menu', {
+    const j = await fetch('/api/admin/menu', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -158,11 +157,8 @@ async function createMenuItem() {
 
     window.addLocked = false;
 
-    if (j.ok && j.item) {
-      drawRow(j.item);
-    } else {
-      console.error(j.error || j);
-    }
+    if (j.ok && j.item) drawRow(j.item);
+    else console.error(j.error || j);
   } catch (err) {
     window.addLocked = false;
     console.error('[CREATE MENU ERROR]', err);
@@ -171,12 +167,11 @@ async function createMenuItem() {
 
 // === Menüzeile darstellen ===
 function drawRow(item) {
-  const tbody = document.querySelector('#mnTable tbody');
+  const tbody = document.querySelector('#menuItemsTable tbody');
   if (!tbody) return;
 
   const tr = document.createElement('tr');
   tr.dataset.id = item.id;
-
   tr.innerHTML = `
     <td>${item.id}</td>
     <td><input type="text" value="${item.title || ''}" class="mn-title" /></td>
@@ -193,7 +188,60 @@ function drawRow(item) {
       <button class="btn-delete" data-id="${item.id}">🗑️</button>
     </td>
   `;
-
   tbody.appendChild(tr);
 }
 
+// === Klick-Handler für Aktionen ===
+async function onMenuClick(ev) {
+  const btn = ev.target.closest('button');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (btn.classList.contains('btn-edit')) return editMenu(id);
+  if (btn.classList.contains('btn-delete')) return deleteMenu(id);
+}
+
+// === Menüpunkt bearbeiten ===
+async function editMenu(id) {
+  try {
+    const res = await fetch(`/api/admin/menu/${id}`, { credentials: 'include' });
+    const j = await res.json();
+    if (!j.ok || !j.item) return alert('Fehler beim Laden');
+
+    const html = prompt('Inhalt bearbeiten (HTML erlaubt):', j.item.content_html || '');
+    if (html === null) return;
+
+    const payload = { ...j.item, content_html: html };
+
+    const u = await fetch(`/api/admin/menu/${id}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const upd = await u.json();
+    if (upd.ok) alert('Gespeichert ✅');
+    else alert('Fehler beim Speichern ⚠️');
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
+}
+
+// === Menüpunkt löschen ===
+async function deleteMenu(id) {
+  if (!confirm('Wirklich löschen?')) return;
+  try {
+    const res = await fetch(`/api/admin/menu/${id}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    const j = await res.json();
+    if (j.ok) {
+      document.querySelector(`tr[data-id="${id}"]`)?.remove();
+    } else {
+      alert('Fehler beim Löschen ⚠️');
+    }
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
+}
