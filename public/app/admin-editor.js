@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // === Menüeinträge laden ===
   async function loadMenuItems() {
     try {
-      const res = await fetch('./api/admin/menu', { credentials: 'include' });
+      const res = await fetch('/api/admin/menu', { credentials: 'include' });
       const data = await res.json();
       const tbody = document.querySelector('#menuItemsTable tbody');
       if (!tbody) return;
@@ -143,7 +143,7 @@ async function createMenuItem() {
   window.addLocked = true;
 
   try {
-    const j = await fetch('./api/admin/menu', {
+   const j = await fetch('/api/admin/menu', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
