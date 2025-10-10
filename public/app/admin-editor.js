@@ -169,10 +169,9 @@ async function createMenuItem() {
   }
 }
 
-
 // === Menüzeile darstellen ===
 function drawRow(item) {
-  const tableBody  = document.querySelector('#mnTable tbody');
+  const tbody = document.querySelector('#mnTable tbody');
   if (!tbody) return;
 
   const tr = document.createElement('tr');
@@ -197,3 +196,4 @@ function drawRow(item) {
 
   tbody.appendChild(tr);
 }
+
