@@ -14,6 +14,7 @@
       margin: 0;
       color: #eee;
     }
+
     nav.menu {
       position: fixed;
       top: 0;
@@ -22,34 +23,48 @@
       display: flex;
       justify-content: center;
       flex-wrap: wrap;
-      gap: 18px;
-      background: rgba(10, 10, 25, 0.6);
-      padding: 12px 0;
-      backdrop-filter: blur(10px);
+      gap: 12px;
+      background: rgba(15, 15, 35, 0.6);
+      padding: 14px 0;
+      backdrop-filter: blur(8px);
       z-index: 999;
     }
-    nav.menu a {
-      color: #ffd600;
-      text-decoration: none;
-      font-weight: 700;
-      font-size: 1rem;
-      padding: 6px 10px;
-      border-radius: 8px;
+    nav.menu button {
+      background: #19213a;
+      color: #fff;
+      border: 1px solid #223058;
+      border-radius: 20px;
+      font-weight: 600;
+      padding: 8px 18px;
+      cursor: pointer;
       transition: all 0.2s ease;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
     }
-    nav.menu a:hover { color: #fff; background: rgba(255, 214, 0, 0.2); }
+    nav.menu button:hover {
+      background: #223058;
+      transform: scale(1.05);
+    }
 
-    .info-window {
-      margin-top: 100px;
+    .bubble {
+      position: absolute;
+      top: 58px;
+      left: 50%;
+      transform: translateX(-50%);
       background: #11182a;
-      border-radius: 12px;
-      color: #eee;
-      padding: 20px;
-      width: min(700px, 92vw);
-      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+      color: #fff;
+      border-radius: 16px;
+      padding: 18px 24px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+      width: min(600px, 90vw);
       display: none;
+      z-index: 900;
+      animation: pop 0.25s ease;
     }
-    .info-window.active { display: block; }
+    .bubble.active { display: block; }
+    @keyframes pop {
+      from { opacity: 0; transform: translateX(-50%) scale(0.95); }
+      to { opacity: 1; transform: translateX(-50%) scale(1); }
+    }
 
     .card {
       width: min(420px, 92vw);
@@ -57,7 +72,7 @@
       border-radius: 16px;
       box-shadow: 0 12px 30px rgba(0,0,0,.35);
       padding: 24px;
-      margin-top: 100px;
+      margin-top: 120px;
     }
     .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
     .tabs button {
@@ -70,8 +85,8 @@
       cursor: pointer;
       font-weight: 600;
     }
-    .tabs button.active { background: #223058; outline: 2px solid #ffd600; }
-    label { display: block; font-size: .9rem; margin: 12px 0 6px; color: #ffd600; }
+    .tabs button.active { background: #223058; outline: 2px solid #223058; }
+    label { display: block; font-size: .9rem; margin: 12px 0 6px; color: #cdd5ff; }
     input {
       width: 100%;
       padding: 10px;
@@ -101,6 +116,7 @@
 <body>
 
 <nav class="menu" id="loginMenu"></nav>
+<div id="bubble" class="bubble"></div>
 
 <div class="card">
   <h1>Welcome to Poker Joker 🃏</h1>
@@ -133,47 +149,39 @@
   <p class="muted" style="text-align:right;margin-top:6px;">After login you will be redirected to app.</p>
 </div>
 
-<div id="loginInfo" class="info-window"></div>
-
 <script>
-const $ = s => document.querySelector(s);
-const infoWindow = $('#loginInfo');
+const bubble = document.getElementById('bubble');
+let currentBtn = null;
 
-// Tabs
-$('#tab-login').onclick = () => show('login');
-$('#tab-signup').onclick = () => show('signup');
-function show(which) {
-  const login = $('#loginForm'), signup = $('#signupForm');
-  if (which === 'login') {
-    login.hidden = false; signup.hidden = true;
-    $('#tab-login').classList.add('active');
-    $('#tab-signup').classList.remove('active');
-  } else {
-    login.hidden = true; signup.hidden = false;
-    $('#tab-signup').classList.add('active');
-    $('#tab-login').classList.remove('active');
-  }
-}
-
-// Dynamisches Menü
+// Menü dynamisch laden
 (async () => {
   try {
     const res = await fetch('/api/admin/public');
     const d = await res.json();
     if (d.ok && d.items?.length) {
-      const menu = document.getElementById('loginMenu');
-      menu.innerHTML = d.items.map(i => `
-        <a href="#" data-content="${encodeURIComponent(i.content_html || '')}">
+      const nav = document.getElementById('loginMenu');
+      nav.innerHTML = d.items.map(i =>
+        `<button data-html="${encodeURIComponent(i.content_html || '')}">
           ${i.title}
-        </a>`).join('');
+        </button>`).join('');
 
-      menu.querySelectorAll('a').forEach(a => {
-        a.addEventListener('click', ev => {
-          ev.preventDefault();
-          const html = decodeURIComponent(a.dataset.content);
-          infoWindow.innerHTML = html || '<p>Inhalt kommt später</p>';
-          infoWindow.classList.add('active');
+      nav.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const html = decodeURIComponent(btn.dataset.html);
+          if (currentBtn === btn && bubble.classList.contains('active')) {
+            bubble.classList.remove('active');
+            currentBtn = null;
+            return;
+          }
+          bubble.innerHTML = html || '<p>Inhalt kommt später</p>';
+          bubble.classList.add('active');
+          currentBtn = btn;
         });
+      });
+
+      document.addEventListener('click', e => {
+        if (!nav.contains(e.target) && e.target !== bubble)
+          bubble.classList.remove('active');
       });
     }
   } catch (err) {
