@@ -1,124 +1,17 @@
 // public/app/admin-editor.js
-// 🃏 Poker Joker: Prompt UI + Menüverwaltung (DB-gesteuert)
+// 🃏 Poker Joker – Prompt + Menüverwaltung mit Priorität & Editor-Fix
 
 document.addEventListener('DOMContentLoaded', () => {
-
-  // === DOM Elemente ===
-  const promptTextarea = document.getElementById('admPrompt');
-  const tempInput      = document.getElementById('admTemp');
-  const modelSelect    = document.getElementById('admModel');
-  const testBtn        = document.getElementById('btnPromptTest');
-  const saveBtn        = document.getElementById('btnPromptSave');
-  const statusSpan     = document.getElementById('promptStatus');
-  const outAnswer      = document.getElementById('admAnswer');
-  const modeButtons    = document.querySelectorAll('input[name="chatMode"]');
-  const chatModeSave   = document.getElementById('btnChatModeSave');
-  const chatModeStatus = document.getElementById('chatModeStatus');
-  const punctInput     = document.getElementById('punctRate');
-  const maxTokInput    = document.getElementById('maxUsedTokens');
-  const addBtn         = document.getElementById('mnAdd');
-  let addLocked        = false;
-
-  // === API Helper ===
-  async function api(url, options = {}) {
-    const opts = {
-      credentials: 'include',
-      headers: { 'Accept': 'application/json', ...(options.headers || {}) },
-      ...options,
-    };
-    const res = await fetch(url, opts);
-    if (!res.ok) throw new Error((await res.json())?.error || 'Fehler');
-    return res.json();
-  }
-
-  // === Prompt + Settings laden ===
-  async function loadPromptSettings() {
-    try {
-      const j = await api('/api/admin/prompt');
-      promptTextarea.value = j.system_prompt;
-      tempInput.value      = j.temperature;
-      modelSelect.value    = j.model;
-      punctInput.value     = j.punct_rate ?? 1;
-      maxTokInput.value    = j.max_usedtokens_per_msg ?? 1000;
-
-      if (j.knowledge_mode) {
-        const b = Array.from(modeButtons).find(x => x.value === j.knowledge_mode);
-        if (b) b.checked = true;
-      }
-    } catch (err) {
-      console.error(err);
-      statusSpan.textContent = 'Fehler beim Laden';
-    }
-  }
-
-  // === Prompt testen ===
-  testBtn?.addEventListener('click', async () => {
-    const payload = {
-      system_prompt: promptTextarea.value.trim(),
-      temperature: Number(tempInput.value),
-      model: modelSelect.value,
-      input: 'Was ist Poker?'
-    };
-    try {
-      const j = await api('/api/admin/prompt/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      outAnswer.textContent = j?.output || '[Kein Output]';
-    } catch (err) {
-      outAnswer.textContent = 'Fehler: ' + err.message;
-    }
-  });
-
-  // === Prompt speichern ===
-  saveBtn?.addEventListener('click', async () => {
-    const payload = {
-      system_prompt: promptTextarea.value.trim(),
-      temperature: Number(tempInput.value),
-      model: modelSelect.value,
-      punct_rate: Number(punctInput.value),
-      max_usedtokens_per_msg: Number(maxTokInput.value)
-    };
-    try {
-      const j = await api('/api/admin/prompt', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      statusSpan.textContent = j.ok ? 'Gespeichert ✅' : 'Fehler ⚠️';
-    } catch (err) {
-      statusSpan.textContent = 'Fehler ⚠️';
-    }
-  });
-
-  // === Chat-Mode speichern ===
-  chatModeSave?.addEventListener('click', async () => {
-    const mode = Array.from(modeButtons).find(x => x.checked)?.value || 'LLM_ONLY';
-    try {
-      const j = await api('/api/admin/prompt/mode', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode })
-      });
-      chatModeStatus.textContent = j.ok ? 'Gespeichert ✅' : 'Fehler ⚠️';
-    } catch (err) {
-      chatModeStatus.textContent = 'Fehler ⚠️';
-    }
-  });
-
-  // === Menü initialisieren ===
+  const addBtn = document.getElementById('mnAdd');
   if (!window.mnMenuInitDone) {
     window.mnMenuInitDone = true;
     addBtn?.addEventListener('click', createMenuItem);
-    window.loadMenuItems(); // jetzt global
+    window.loadMenuItems();
   }
-
-  loadPromptSettings();
 });
 
-// === Menü laden (global) ===
-window.loadMenuItems = async function() {
+// === Globale Menü-Ladefunktion ===
+window.loadMenuItems = async function () {
   try {
     const res = await fetch('/api/admin/menu', { credentials: 'include' });
     const data = await res.json();
@@ -130,38 +23,6 @@ window.loadMenuItems = async function() {
     console.error('[MENU LOAD ERROR]', err);
   }
 };
-
-// === Menüpunkt erstellen ===
-async function createMenuItem() {
-  if (window.addLocked) return;
-  window.addLocked = true;
-
-  try {
-    const j = await fetch('/api/admin/menu', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Neuer Punkt',
-        content_html: '<p>Inhalt kommt später</p>',
-        position: 1,
-        location: 'both',
-        is_active: true
-      })
-    }).then(res => res.json());
-
-    window.addLocked = false;
-
-    if (j.ok && j.item) {
-      drawRow(j.item);
-    } else {
-      console.error(j.error || j);
-    }
-  } catch (err) {
-    window.addLocked = false;
-    console.error('[CREATE MENU ERROR]', err);
-  }
-}
 
 // === Menüzeile darstellen ===
 function drawRow(item) {
@@ -181,28 +42,81 @@ function drawRow(item) {
         <option value="both" ${item.location === 'both' ? 'selected' : ''}>Beide</option>
       </select>
     </td>
+    <td><input type="number" class="mn-position" min="0" max="99" value="${item.position || 0}" /></td>
     <td><input type="checkbox" class="mn-active" ${item.is_active ? 'checked' : ''} /></td>
     <td>
-      <button class="btn-edit" data-id="${item.id}">✏️</button>
-      <button class="btn-delete" data-id="${item.id}">🗑️</button>
+      <button class="btn-save" title="Speichern" data-id="${item.id}">💾</button>
+      <button class="btn-edit" title="Bearbeiten" data-id="${item.id}">✏️</button>
+      <button class="btn-delete" title="Löschen" data-id="${item.id}">🗑️</button>
     </td>
   `;
 
-  // === Editieren ===
   tr.querySelector('.btn-edit').addEventListener('click', () => editMenu(item.id));
   tr.querySelector('.btn-delete').addEventListener('click', () => deleteMenu(item.id));
+  tr.querySelector('.btn-save').addEventListener('click', () => saveMenuRow(tr));
 
   tbody.appendChild(tr);
 }
 
-// === Menü bearbeiten ===
+// === Menü speichern (Reihe) ===
+async function saveMenuRow(tr) {
+  const id = tr.dataset.id;
+  const title = tr.querySelector('.mn-title').value.trim();
+  const location = tr.querySelector('.mn-location').value;
+  const position = Number(tr.querySelector('.mn-position').value);
+  const is_active = tr.querySelector('.mn-active').checked;
+
+  try {
+    const res = await fetch(`/api/admin/menu/${id}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, location, position, is_active })
+    });
+    const j = await res.json();
+    if (j.ok) {
+      tr.style.background = '#1b2b1b';
+      setTimeout(() => (tr.style.background = ''), 600);
+    } else alert('Fehler beim Speichern ⚠️');
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
+}
+
+// === Menüpunkt anlegen ===
+async function createMenuItem() {
+  if (window.addLocked) return;
+  window.addLocked = true;
+  try {
+    const res = await fetch('/api/admin/menu', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Neuer Punkt',
+        content_html: '<p>Inhalt kommt später</p>',
+        position: 0,
+        location: 'both',
+        is_active: true
+      })
+    });
+    const j = await res.json();
+    if (j.ok && j.item) drawRow(j.item);
+  } catch (err) {
+    console.error('[CREATE MENU ERROR]', err);
+  } finally {
+    window.addLocked = false;
+  }
+}
+
+// === Menüpunkt bearbeiten ===
 async function editMenu(id) {
   try {
     const res = await fetch(`/api/admin/menu/${id}`, { credentials: 'include' });
     const j = await res.json();
     if (!j.ok || !j.item) return alert('Fehler beim Laden');
-
     const i = j.item;
+
     let editorBox = document.getElementById('editorBox');
     if (editorBox) editorBox.remove();
 
@@ -215,35 +129,42 @@ async function editMenu(id) {
     editorBox.style.boxShadow = '0 0 10px rgba(0,0,0,0.4)';
     editorBox.innerHTML = `
       <h3>📝 Inhalt bearbeiten – ${i.title}</h3>
-      <textarea id="editContent" style="width:100%;min-height:200px;background:#0f1425;color:#fff;border-radius:8px;padding:10px;">${i.content_html || ''}</textarea>
-      <button id="btnSaveEdit" style="margin-top:10px;">💾 Speichern</button>
+      <textarea id="editContent" style="width:100%;min-height:250px;background:#0f1425;color:#fff;border-radius:8px;padding:10px;">${i.content_html || ''}</textarea>
+      <div style="margin-top:10px;display:flex;gap:10px;">
+        <button id="btnSaveEdit">💾 Speichern</button>
+        <button id="btnCancelEdit">❌ Abbrechen</button>
+      </div>
     `;
 
-    const container = document.querySelector('#mnTable')?.closest('section') || document.body;
-    container.appendChild(editorBox);
+    document.querySelector('.card:last-of-type').after(editorBox);
+
+    document.getElementById('btnCancelEdit').addEventListener('click', () => editorBox.remove());
 
     document.getElementById('btnSaveEdit').addEventListener('click', async () => {
       const html = document.getElementById('editContent').value;
-      const payload = {
-        title: i.title,
-        content_html: html,
-        location: i.location,
-        is_active: i.is_active
-      };
-      const u = await fetch(`/api/admin/menu/${id}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const upd = await u.json();
-      if (upd.ok) {
-        alert('Gespeichert ✅');
-        editorBox.remove();
-        window.loadMenuItems();
-      } else alert('Fehler beim Speichern ⚠️');
+      try {
+        const upd = await fetch(`/api/admin/menu/${id}`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: i.title,
+            content_html: html,
+            location: i.location,
+            is_active: i.is_active,
+            position: i.position
+          })
+        });
+        const js = await upd.json();
+        if (js.ok) {
+          alert('Gespeichert ✅');
+          editorBox.remove();
+          window.loadMenuItems();
+        } else alert('Fehler beim Speichern ⚠️');
+      } catch (err) {
+        alert('Fehler: ' + err.message);
+      }
     });
-
   } catch (err) {
     alert('Fehler: ' + err.message);
   }
@@ -259,7 +180,6 @@ async function deleteMenu(id) {
     });
     const j = await res.json();
     if (j.ok) document.querySelector(`tr[data-id="${id}"]`)?.remove();
-    else alert('Fehler beim Löschen ⚠️');
   } catch (err) {
     alert('Fehler: ' + err.message);
   }
