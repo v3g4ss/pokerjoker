@@ -125,6 +125,7 @@
     <button id="tab-signup">Sign up</button>
   </div>
 
+  <!-- Login -->
   <form id="loginForm">
     <label for="loginEmail">Mail</label>
     <input id="loginEmail" type="email" required />
@@ -135,6 +136,7 @@
     <div class="forgot-wrap"><a class="forgot-link" href="/login/reset.html">Password forget?</a></div>
   </form>
 
+  <!-- Sign up -->
   <form id="signupForm" hidden>
     <label for="suEmail">Mail</label>
     <input id="suEmail" type="email" required />
@@ -153,7 +155,7 @@
 const bubble = document.getElementById('bubble');
 let currentBtn = null;
 
-// Menü dynamisch laden
+// === Menü dynamisch laden ===
 (async () => {
   try {
     const res = await fetch('/api/admin/public');
@@ -188,6 +190,81 @@ let currentBtn = null;
     console.warn('Menü-Fehler (Login):', err);
   }
 })();
+
+// === Tabs ===
+const tabLogin = document.getElementById('tab-login');
+const tabSignup = document.getElementById('tab-signup');
+const loginForm = document.getElementById('loginForm');
+const signupForm = document.getElementById('signupForm');
+
+tabLogin.addEventListener('click', () => {
+  tabLogin.classList.add('active');
+  tabSignup.classList.remove('active');
+  loginForm.hidden = false;
+  signupForm.hidden = true;
+});
+tabSignup.addEventListener('click', () => {
+  tabSignup.classList.add('active');
+  tabLogin.classList.remove('active');
+  loginForm.hidden = true;
+  signupForm.hidden = false;
+});
+
+// === Login ===
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const password = document.getElementById('loginPassword').value;
+  const msg = document.getElementById('loginMsg');
+  msg.textContent = '...';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'Login fehlgeschlagen');
+    location.href = data.redirect || '/app';
+  } catch (err) {
+    msg.textContent = err.message || 'Fehler beim Login';
+  }
+});
+
+// === Signup ===
+signupForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('suEmail').value.trim().toLowerCase();
+  const pass1 = document.getElementById('suPassword').value;
+  const pass2 = document.getElementById('suPassword2').value;
+  const msg = document.getElementById('signupMsg');
+  msg.textContent = '...';
+
+  if (pass1 !== pass2) return msg.textContent = 'Passwörter stimmen nicht überein.';
+  if (pass1.length < 8) return msg.textContent = 'Passwort zu kurz (min. 8 Zeichen).';
+
+  try {
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password: pass1 })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok)
+      throw new Error(data.message || (res.status === 409 ? 'E-Mail existiert bereits.' : 'Signup fehlgeschlagen'));
+
+    if (data.ok) {
+      msg.textContent = '✅ Bitte bestätige deine E-Mail-Adresse über den Link in deinem Postfach.';
+      setTimeout(() => {
+        tabLogin.click();
+      }, 3000);
+    }
+  } catch (err) {
+    msg.textContent = err.message || 'Fehler beim Sign up';
+  }
+});
 </script>
 
 </body>
