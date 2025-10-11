@@ -1,23 +1,9 @@
 // public/app/admin-editor.js
-// 🃏 Poker Joker: Prompt UI + Menüverwaltung (punctRate + maxUsedTokens)
+// 🃏 Poker Joker: Prompt UI + Menüverwaltung (DB-gesteuert)
 
 document.addEventListener('DOMContentLoaded', () => {
 
-  // === Menüeinträge laden ===
-  async function loadMenuItems() {
-    try {
-      const res = await fetch('/api/admin/menu', { credentials: 'include' });
-      const data = await res.json();
-      const tbody = document.querySelector('#mnTable tbody');
-      if (!tbody) return;
-      tbody.innerHTML = '';
-      (data.items || []).forEach(drawRow);
-    } catch (err) {
-      console.error('[MENU LOAD ERROR]', err);
-    }
-  }
-
-  // === DOM-Elemente holen ===
+  // === DOM Elemente ===
   const promptTextarea = document.getElementById('admPrompt');
   const tempInput      = document.getElementById('admTemp');
   const modelSelect    = document.getElementById('admModel');
@@ -30,13 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatModeStatus = document.getElementById('chatModeStatus');
   const punctInput     = document.getElementById('punctRate');
   const maxTokInput    = document.getElementById('maxUsedTokens');
+  const addBtn         = document.getElementById('mnAdd');
+  let addLocked        = false;
 
-  const addBtn = document.getElementById('mnAdd');
-  let addLocked = false;
-
-  if (!promptTextarea || !tempInput || !modelSelect || !testBtn || !saveBtn) return;
-
-  // === Hilfsfunktion für API ===
+  // === API Helper ===
   async function api(url, options = {}) {
     const opts = {
       credentials: 'include',
@@ -58,7 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
       punctInput.value     = j.punct_rate ?? 1;
       maxTokInput.value    = j.max_usedtokens_per_msg ?? 1000;
 
-      // ChatMode setzen
       if (j.knowledge_mode) {
         const b = Array.from(modeButtons).find(x => x.value === j.knowledge_mode);
         if (b) b.checked = true;
@@ -70,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // === Prompt testen ===
-  testBtn.addEventListener('click', async () => {
+  testBtn?.addEventListener('click', async () => {
     const payload = {
       system_prompt: promptTextarea.value.trim(),
       temperature: Number(tempInput.value),
@@ -89,8 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // === Prompt + Einstellungen speichern ===
-  saveBtn.addEventListener('click', async () => {
+  // === Prompt speichern ===
+  saveBtn?.addEventListener('click', async () => {
     const payload = {
       system_prompt: promptTextarea.value.trim(),
       temperature: Number(tempInput.value),
@@ -129,14 +111,27 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!window.mnMenuInitDone) {
     window.mnMenuInitDone = true;
     addBtn?.addEventListener('click', createMenuItem);
-    document.querySelector('#mnTable')?.addEventListener('click', onMenuClick);
-    loadMenuItems();
+    window.loadMenuItems(); // jetzt global
   }
 
   loadPromptSettings();
 });
 
-// === Menüpunkt-Erstellung ===
+// === Menü laden (global) ===
+window.loadMenuItems = async function() {
+  try {
+    const res = await fetch('/api/admin/menu', { credentials: 'include' });
+    const data = await res.json();
+    const tbody = document.querySelector('#mnTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    (data.items || []).forEach(drawRow);
+  } catch (err) {
+    console.error('[MENU LOAD ERROR]', err);
+  }
+};
+
+// === Menüpunkt erstellen ===
 async function createMenuItem() {
   if (window.addLocked) return;
   window.addLocked = true;
@@ -157,8 +152,11 @@ async function createMenuItem() {
 
     window.addLocked = false;
 
-    if (j.ok && j.item) drawRow(j.item);
-    else console.error(j.error || j);
+    if (j.ok && j.item) {
+      drawRow(j.item);
+    } else {
+      console.error(j.error || j);
+    }
   } catch (err) {
     window.addLocked = false;
     console.error('[CREATE MENU ERROR]', err);
@@ -172,6 +170,7 @@ function drawRow(item) {
 
   const tr = document.createElement('tr');
   tr.dataset.id = item.id;
+
   tr.innerHTML = `
     <td>${item.id}</td>
     <td><input type="text" value="${item.title || ''}" class="mn-title" /></td>
@@ -188,46 +187,69 @@ function drawRow(item) {
       <button class="btn-delete" data-id="${item.id}">🗑️</button>
     </td>
   `;
+
+  // === Editieren ===
+  tr.querySelector('.btn-edit').addEventListener('click', () => editMenu(item.id));
+  tr.querySelector('.btn-delete').addEventListener('click', () => deleteMenu(item.id));
+
   tbody.appendChild(tr);
 }
 
-// === Klick-Handler für Aktionen ===
-async function onMenuClick(ev) {
-  const btn = ev.target.closest('button');
-  if (!btn) return;
-  const id = btn.dataset.id;
-  if (btn.classList.contains('btn-edit')) return editMenu(id);
-  if (btn.classList.contains('btn-delete')) return deleteMenu(id);
-}
-
-// === Menüpunkt bearbeiten ===
+// === Menü bearbeiten ===
 async function editMenu(id) {
   try {
     const res = await fetch(`/api/admin/menu/${id}`, { credentials: 'include' });
     const j = await res.json();
     if (!j.ok || !j.item) return alert('Fehler beim Laden');
 
-    const html = prompt('Inhalt bearbeiten (HTML erlaubt):', j.item.content_html || '');
-    if (html === null) return;
+    const i = j.item;
+    let editorBox = document.getElementById('editorBox');
+    if (editorBox) editorBox.remove();
 
-    const payload = { ...j.item, content_html: html };
+    editorBox = document.createElement('div');
+    editorBox.id = 'editorBox';
+    editorBox.style.marginTop = '20px';
+    editorBox.style.padding = '16px';
+    editorBox.style.background = '#1a2235';
+    editorBox.style.borderRadius = '10px';
+    editorBox.style.boxShadow = '0 0 10px rgba(0,0,0,0.4)';
+    editorBox.innerHTML = `
+      <h3>📝 Inhalt bearbeiten – ${i.title}</h3>
+      <textarea id="editContent" style="width:100%;min-height:200px;background:#0f1425;color:#fff;border-radius:8px;padding:10px;">${i.content_html || ''}</textarea>
+      <button id="btnSaveEdit" style="margin-top:10px;">💾 Speichern</button>
+    `;
 
-    const u = await fetch(`/api/admin/menu/${id}`, {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+    const container = document.querySelector('#mnTable')?.closest('section') || document.body;
+    container.appendChild(editorBox);
+
+    document.getElementById('btnSaveEdit').addEventListener('click', async () => {
+      const html = document.getElementById('editContent').value;
+      const payload = {
+        title: i.title,
+        content_html: html,
+        location: i.location,
+        is_active: i.is_active
+      };
+      const u = await fetch(`/api/admin/menu/${id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const upd = await u.json();
+      if (upd.ok) {
+        alert('Gespeichert ✅');
+        editorBox.remove();
+        window.loadMenuItems();
+      } else alert('Fehler beim Speichern ⚠️');
     });
 
-    const upd = await u.json();
-    if (upd.ok) alert('Gespeichert ✅');
-    else alert('Fehler beim Speichern ⚠️');
   } catch (err) {
     alert('Fehler: ' + err.message);
   }
 }
 
-// === Menüpunkt löschen ===
+// === Menü löschen ===
 async function deleteMenu(id) {
   if (!confirm('Wirklich löschen?')) return;
   try {
@@ -236,11 +258,8 @@ async function deleteMenu(id) {
       credentials: 'include'
     });
     const j = await res.json();
-    if (j.ok) {
-      document.querySelector(`tr[data-id="${id}"]`)?.remove();
-    } else {
-      alert('Fehler beim Löschen ⚠️');
-    }
+    if (j.ok) document.querySelector(`tr[data-id="${id}"]`)?.remove();
+    else alert('Fehler beim Löschen ⚠️');
   } catch (err) {
     alert('Fehler: ' + err.message);
   }
