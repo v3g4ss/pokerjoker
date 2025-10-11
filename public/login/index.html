@@ -37,23 +37,20 @@
       border-radius: 8px;
       transition: all 0.2s ease;
     }
-    nav.menu a:hover {
-      color: #fff;
-      background: rgba(255, 214, 0, 0.2);
-    }
+    nav.menu a:hover { color: #fff; background: rgba(255, 214, 0, 0.2); }
+
     .info-window {
-      margin-top: 90px;
-      background: rgba(17, 24, 42, 0.9);
+      margin-top: 100px;
+      background: #11182a;
       border-radius: 12px;
       color: #eee;
       padding: 20px;
-      width: min(600px, 90vw);
+      width: min(700px, 92vw);
       box-shadow: 0 8px 24px rgba(0,0,0,.35);
       display: none;
     }
-    .info-window.active {
-      display: block;
-    }
+    .info-window.active { display: block; }
+
     .card {
       width: min(420px, 92vw);
       background: #11182a;
@@ -64,19 +61,17 @@
     }
     .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
     .tabs button {
-      flex: 1; padding: 10px; border: 0; border-radius: 12px;
-      background: #19213a; color: #eee; cursor: pointer; font-weight: 600;
+      flex: 1;
+      padding: 10px;
+      border: 0;
+      border-radius: 12px;
+      background: #19213a;
+      color: #eee;
+      cursor: pointer;
+      font-weight: 600;
     }
-    .tabs button.active {
-      background: #223058;
-      outline: 2px solid #ffd600;
-    }
-    label {
-      display: block;
-      font-size: .9rem;
-      margin: 12px 0 6px;
-      color: #ffd600;
-    }
+    .tabs button.active { background: #223058; outline: 2px solid #ffd600; }
+    label { display: block; font-size: .9rem; margin: 12px 0 6px; color: #ffd600; }
     input {
       width: 100%;
       padding: 10px;
@@ -105,7 +100,6 @@
 </head>
 <body>
 
-<!-- 🟡 Dynamisches Menü -->
 <nav class="menu" id="loginMenu"></nav>
 
 <div class="card">
@@ -115,30 +109,24 @@
     <button id="tab-signup">Sign up</button>
   </div>
 
-  <!-- Login -->
   <form id="loginForm">
     <label for="loginEmail">Mail</label>
-    <input id="loginEmail" type="email" autocomplete="email" required />
+    <input id="loginEmail" type="email" required />
     <label for="loginPassword">Password</label>
-    <input id="loginPassword" type="password" autocomplete="current-password" required />
+    <input id="loginPassword" type="password" required />
     <div class="actions"><button class="btn" type="submit">Login</button></div>
     <div id="loginMsg" class="msg"></div>
-    <div class="forgot-wrap">
-      <a class="forgot-link" href="/login/reset.html">Password forget?</a>
-    </div>
+    <div class="forgot-wrap"><a class="forgot-link" href="/login/reset.html">Password forget?</a></div>
   </form>
 
-  <!-- Sign up -->
   <form id="signupForm" hidden>
     <label for="suEmail">Mail</label>
-    <input id="suEmail" type="email" autocomplete="email" required />
+    <input id="suEmail" type="email" required />
     <label for="suPassword">Password</label>
-    <input id="suPassword" type="password" autocomplete="new-password" minlength="8" required />
+    <input id="suPassword" type="password" minlength="8" required />
     <label for="suPassword2">Repeat password</label>
-    <input id="suPassword2" type="password" autocomplete="new-password" minlength="8" required />
-    <div class="actions">
-      <button class="btn" type="submit">Create account</button>
-    </div>
+    <input id="suPassword2" type="password" minlength="8" required />
+    <div class="actions"><button class="btn" type="submit">Create account</button></div>
     <div id="signupMsg" class="msg"></div>
   </form>
 
@@ -149,94 +137,44 @@
 
 <script>
 const $ = s => document.querySelector(s);
-const tabLogin = $('#tab-login');
-const tabSignup = $('#tab-signup');
-const loginForm = $('#loginForm');
-const signupForm = $('#signupForm');
 const infoWindow = $('#loginInfo');
 
-function showLogin() {
-  tabLogin.classList.add('active');
-  tabSignup.classList.remove('active');
-  loginForm.hidden = false;
-  signupForm.hidden = true;
-  $('#loginMsg').textContent = '';
-  $('#signupMsg').textContent = '';
+// Tabs
+$('#tab-login').onclick = () => show('login');
+$('#tab-signup').onclick = () => show('signup');
+function show(which) {
+  const login = $('#loginForm'), signup = $('#signupForm');
+  if (which === 'login') {
+    login.hidden = false; signup.hidden = true;
+    $('#tab-login').classList.add('active');
+    $('#tab-signup').classList.remove('active');
+  } else {
+    login.hidden = true; signup.hidden = false;
+    $('#tab-signup').classList.add('active');
+    $('#tab-login').classList.remove('active');
+  }
 }
 
-function showSignup() {
-  tabSignup.classList.add('active');
-  tabLogin.classList.remove('active');
-  loginForm.hidden = true;
-  signupForm.hidden = false;
-  $('#loginMsg').textContent = '';
-  $('#signupMsg').textContent = '';
-}
-
-tabLogin?.addEventListener('click', showLogin);
-tabSignup?.addEventListener('click', showSignup);
-
-// === LOGIN ===
-loginForm?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const email = $('#loginEmail').value.trim().toLowerCase();
-  const password = $('#loginPassword').value;
-  const msg = $('#loginMsg'); msg.textContent = '...';
-  try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || 'Login fehlgeschlagen');
-    location.href = data.redirect || '/app';
-  } catch (err) {
-    msg.textContent = err.message || 'Fehler beim Login';
-  }
-});
-
-// === SIGNUP (Double Opt-In) ===
-signupForm?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const email = $('#suEmail').value.trim().toLowerCase();
-  const pass1 = $('#suPassword').value;
-  const pass2 = $('#suPassword2').value;
-  const msg = $('#signupMsg'); msg.textContent = '...';
-  if (pass1 !== pass2) return msg.textContent = 'Passwörter stimmen nicht überein.';
-  if (pass1.length < 8) return msg.textContent = 'Passwort zu kurz (min. 8 Zeichen).';
-  try {
-    const res = await fetch('/api/auth/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password: pass1 })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok)
-      throw new Error(data.message || (res.status === 409 ? 'E-Mail existiert bereits.' : 'Signup fehlgeschlagen'));
-    if (data.ok) {
-      msg.textContent = '✅ Bitte bestätige deine E-Mail-Adresse über den Link in deinem Postfach.';
-      setTimeout(() => showLogin(), 3000);
-    }
-  } catch (err) {
-    msg.textContent = err.message || 'Fehler beim Sign up';
-  }
-});
-
-showLogin();
-
-// === 🔥 Dynamisches Menü laden ===
+// Dynamisches Menü
 (async () => {
   try {
     const res = await fetch('/api/admin/public');
     const d = await res.json();
     if (d.ok && d.items?.length) {
       const menu = document.getElementById('loginMenu');
-      menu.innerHTML = d.items.map(i =>
-        `<a href="#" onclick="document.getElementById('loginInfo').classList.add('active');document.getElementById('loginInfo').innerHTML = \`${i.content_html || ''}\`">${i.title}</a>`
-      ).join('');
+      menu.innerHTML = d.items.map(i => `
+        <a href="#" data-content="${encodeURIComponent(i.content_html || '')}">
+          ${i.title}
+        </a>`).join('');
+
+      menu.querySelectorAll('a').forEach(a => {
+        a.addEventListener('click', ev => {
+          ev.preventDefault();
+          const html = decodeURIComponent(a.dataset.content);
+          infoWindow.innerHTML = html || '<p>Inhalt kommt später</p>';
+          infoWindow.classList.add('active');
+        });
+      });
     }
   } catch (err) {
     console.warn('Menü-Fehler (Login):', err);

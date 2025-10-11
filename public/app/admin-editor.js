@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch('/api/admin/menu', { credentials: 'include' });
       const data = await res.json();
-      const tbody = document.querySelector('#menuItemsTable tbody');
+      const tbody = document.querySelector('#mnTable tbody');
       if (!tbody) return;
       tbody.innerHTML = '';
       (data.items || []).forEach(drawRow);
@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!window.mnMenuInitDone) {
     window.mnMenuInitDone = true;
     addBtn?.addEventListener('click', createMenuItem);
-    document.querySelector('#menuItemsTable')?.addEventListener('click', onMenuClick);
+    document.querySelector('#mnTable')?.addEventListener('click', onMenuClick);
     loadMenuItems();
   }
 
@@ -167,7 +167,7 @@ async function createMenuItem() {
 
 // === Menüzeile darstellen ===
 function drawRow(item) {
-  const tbody = document.querySelector('#menuItemsTable tbody');
+  const tbody = document.querySelector('#mnTable tbody');
   if (!tbody) return;
 
   const tr = document.createElement('tr');
