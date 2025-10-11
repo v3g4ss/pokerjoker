@@ -1,41 +1,189 @@
 // public/app/admin-editor.js
-// 🃏 Poker Joker – Menüverwaltung mit Priorität & stabilem Editor
+// 🃏 Poker Joker – Admin: Prompt + Menü-Editor (mit Prio & Texteditor)
 
 document.addEventListener('DOMContentLoaded', () => {
-  const addBtn = document.getElementById('mnAdd');
-  if (!window.mnMenuInitDone) {
-    window.mnMenuInitDone = true;
-    addBtn?.addEventListener('click', createMenuItem);
-    window.loadMenuItems(); // global
-  }
+  init();
 });
 
-// === Globale Menü-Ladefunktion (für spätere Reloads aus Editor usw.) ===
-window.loadMenuItems = async function () {
-  try {
-    const res = await fetch('/api/admin/menu', { credentials: 'include' });
-    const data = await res.json();
-    const tbody = document.querySelector('#mnTable tbody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    (data.items || []).forEach(drawRow);
-  } catch (err) {
-    console.error('[MENU LOAD ERROR]', err);
-    alert('Fehler beim Laden der Menüpunkte.');
-  }
-};
+async function init() {
+  // DOM
+  const addBtn = document.getElementById('mnAdd');
+  const tbody = getTbody();
+  if (!tbody) return; // Seite ohne Menütabelle? -> Finish
 
-// === Eine Tabellenzeile rendern ===
+  // Events
+  addBtn?.addEventListener('click', onCreate);
+
+  // UI laden
+  await loadPromptSettings().catch(() => {});
+  await loadMenuItems();
+}
+
+/* ---------------------------------- Utils ---------------------------------- */
+
+function getTbody() {
+  // kompatibel mit deinen beiden Varianten
+  return (
+    document.querySelector('#mnTable tbody') ||
+    document.querySelector('#menuItemsTable tbody')
+  );
+}
+
+async function api(url, options = {}) {
+  const opts = {
+    credentials: 'include',
+    headers: { Accept: 'application/json', ...(options.headers || {}) },
+    ...options,
+  };
+  const res = await fetch(url, opts);
+  let json = {};
+  try { json = await res.json(); } catch (_) {}
+  if (!res.ok) {
+    const msg =
+      json?.error ||
+      json?.message ||
+      `${res.status} ${res.statusText || 'Fehler'}`;
+    throw new Error(msg);
+  }
+  return json;
+}
+
+function toast(msg) {
+  // sehr simple „Toast“-Variante
+  console.log('[INFO]', msg);
+}
+
+/* ---------------------------- Prompt-Einstellungen -------------------------- */
+
+async function loadPromptSettings() {
+  const promptTextarea = document.getElementById('admPrompt');
+  const tempInput = document.getElementById('admTemp');
+  const modelSelect = document.getElementById('admModel');
+  const modeButtons = document.querySelectorAll('input[name="chatMode"]');
+  const chatModeSave = document.getElementById('btnChatModeSave');
+  const chatModeStatus = document.getElementById('chatModeStatus');
+  const punctInput = document.getElementById('punctRate');
+  const maxTokInput = document.getElementById('maxUsedTokens');
+  const testBtn = document.getElementById('btnPromptTest');
+  const saveBtn = document.getElementById('btnPromptSave');
+  const outAnswer = document.getElementById('admAnswer');
+  const statusSpan = document.getElementById('promptStatus');
+
+  // wenn diese Felder nicht existieren (andere Seite), still beenden
+  if (!promptTextarea || !tempInput || !modelSelect || !saveBtn || !testBtn) return;
+
+  // Laden
+  try {
+    const j = await api('/api/admin/prompt');
+    promptTextarea.value = j.system_prompt || '';
+    tempInput.value = j.temperature ?? 1;
+    modelSelect.value = j.model || '';
+    punctInput && (punctInput.value = j.punct_rate ?? 1);
+    maxTokInput && (maxTokInput.value = j.max_usedtokens_per_msg ?? 1000);
+    if (j.knowledge_mode) {
+      const b = Array.from(modeButtons).find(x => x.value === j.knowledge_mode);
+      if (b) b.checked = true;
+    }
+  } catch (err) {
+    console.warn('Prompt laden:', err.message);
+  }
+
+  // Test
+  testBtn.addEventListener('click', async () => {
+    const payload = {
+      system_prompt: promptTextarea.value.trim(),
+      temperature: Number(tempInput.value),
+      model: modelSelect.value,
+      input: 'Was ist Poker?',
+    };
+    try {
+      const j = await api('/api/admin/prompt/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      outAnswer.textContent = j?.output || '[Kein Output]';
+    } catch (err) {
+      outAnswer.textContent = 'Fehler: ' + err.message;
+    }
+  });
+
+  // Speichern
+  saveBtn.addEventListener('click', async () => {
+    const payload = {
+      system_prompt: promptTextarea.value.trim(),
+      temperature: Number(tempInput.value),
+      model: modelSelect.value,
+      punct_rate: Number(punctInput?.value ?? 1),
+      max_usedtokens_per_msg: Number(maxTokInput?.value ?? 1000),
+    };
+    try {
+      const j = await api('/api/admin/prompt', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      statusSpan.textContent = j.ok ? 'Gespeichert ✅' : 'Fehler ⚠️';
+    } catch (err) {
+      statusSpan.textContent = 'Fehler ⚠️';
+    }
+  });
+
+  // ChatMode speichern
+  chatModeSave?.addEventListener('click', async () => {
+    const mode =
+      Array.from(modeButtons).find(x => x.checked)?.value || 'LLM_ONLY';
+    try {
+      const j = await api('/api/admin/prompt/mode', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      });
+      chatModeStatus.textContent = j.ok ? 'Gespeichert ✅' : 'Fehler ⚠️';
+    } catch (err) {
+      chatModeStatus.textContent = 'Fehler ⚠️';
+    }
+  });
+}
+
+/* ------------------------------- Menüverwaltung ----------------------------- */
+
+// Menü laden
+async function loadMenuItems() {
+  const tbody = getTbody();
+  if (!tbody) return;
+
+  try {
+    const j = await api('/api/admin/menu');
+    const items = (j.items || []).slice().sort(byPositionThenId);
+    tbody.innerHTML = '';
+    items.forEach(drawRow);
+  } catch (err) {
+    console.error('[MENU LOAD ERROR]', err.message);
+  }
+}
+
+function byPositionThenId(a, b) {
+  const pa = (a.position ?? 0) | 0;
+  const pb = (b.position ?? 0) | 0;
+  if (pa !== pb) return pa - pb;
+  return (a.id | 0) - (b.id | 0);
+}
+
+// Neue Zeile zeichnen
 function drawRow(item) {
-  const tbody = document.querySelector('#mnTable tbody');
+  const tbody = getTbody();
   if (!tbody) return;
 
   const tr = document.createElement('tr');
-  tr.dataset.id = String(item.id);
+  tr.dataset.id = item.id;
+
+  const active = !!item.is_active;
+  const pos = (item.position ?? 0);
 
   tr.innerHTML = `
     <td>${item.id}</td>
-    <td><input type="text" value="${item.title || ''}" class="mn-title" /></td>
+    <td><input type="text" class="mn-title" value="${escapeHtml(item.title || '')}" /></td>
     <td>
       <select class="mn-location">
         <option value="login" ${item.location === 'login' ? 'selected' : ''}>Login</option>
@@ -43,163 +191,156 @@ function drawRow(item) {
         <option value="both"  ${item.location === 'both'  ? 'selected' : ''}>Beide</option>
       </select>
     </td>
-    <td><input type="number" class="mn-position" min="0" max="999" value="${item.position ?? 0}" /></td>
-    <td><input type="checkbox" class="mn-active" ${item.is_active ? 'checked' : ''} /></td>
+    <td style="text-align:center;">
+      <input type="checkbox" class="mn-active" ${active ? 'checked' : ''} />
+    </td>
+    <td style="width:92px;">
+      <input type="number" min="0" step="1" class="mn-position" value="${pos}" />
+    </td>
     <td>
-      <button class="btn-save"   title="Speichern"  data-id="${item.id}">💾</button>
-      <button class="btn-edit"   title="Bearbeiten" data-id="${item.id}">✏️</button>
-      <button class="btn-delete" title="Löschen"    data-id="${item.id}">🗑️</button>
+      <button class="mn-save"   title="Speichern">💾</button>
+      <button class="mn-edit"   title="Inhalt bearbeiten">✏️</button>
+      <button class="mn-delete" title="Löschen">🗑</button>
     </td>
   `;
 
-  tr.querySelector('.btn-save').addEventListener('click', () => saveMenuRow(tr));
-  tr.querySelector('.btn-edit').addEventListener('click', () => editMenu(item.id));
-  tr.querySelector('.btn-delete').addEventListener('click', () => deleteMenu(item.id));
+  // Events
+  tr.querySelector('.mn-save')  .addEventListener('click', () => onSaveRow(tr));
+  tr.querySelector('.mn-edit')  .addEventListener('click', () => onEditRow(item.id));
+  tr.querySelector('.mn-delete').addEventListener('click', () => onDeleteRow(item.id));
 
   tbody.appendChild(tr);
 }
 
-// === Speichern-Button (Titel, Ort, Position, Aktiv) ===
-async function saveMenuRow(tr) {
-  const id        = tr.dataset.id;
-  const title     = tr.querySelector('.mn-title').value.trim();
-  const location  = tr.querySelector('.mn-location').value;
-  const position  = Number(tr.querySelector('.mn-position').value);
-  const is_active = tr.querySelector('.mn-active').checked;
-
-  try {
-    const res = await fetch(`/api/admin/menu/${id}`, {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, location, position, is_active })
-    });
-    const j = await res.json();
-    if (j.ok) {
-      // kleines visuelles Feedback
-      tr.style.transition = 'background 0.3s';
-      tr.style.background = '#1b2b1b';
-      setTimeout(() => (tr.style.background = ''), 600);
-
-      // neu laden, damit sortierte Reihenfolge sichtbar wird
-      window.loadMenuItems();
-    } else {
-      alert('Fehler beim Speichern ⚠️');
-    }
-  } catch (err) {
-    alert('Fehler: ' + err.message);
-  }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])
+  );
 }
 
-// === Neu anlegen ===
-async function createMenuItem() {
-  if (window.addLocked) return;
-  window.addLocked = true;
+// Neuen Menüpunkt erstellen
+async function onCreate() {
   try {
-    const res = await fetch('/api/admin/menu', {
+    const j = await api('/api/admin/menu', {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: 'Neuer Punkt',
         content_html: '<p>Inhalt kommt später</p>',
-        position: 0,
+        position: await nextPosition(),
         location: 'both',
-        is_active: true
-      })
+        is_active: true,
+      }),
     });
-    const j = await res.json();
-    if (j.ok && j.item) {
-      drawRow(j.item);
-    }
+    toast('Menüpunkt angelegt');
+    await loadMenuItems();
   } catch (err) {
-    console.error('[CREATE MENU ERROR]', err);
-  } finally {
-    window.addLocked = false;
+    alert('Fehler beim Anlegen: ' + err.message);
   }
 }
 
-// === Editor (öffnet UNTER der Tabelle) ===
-async function editMenu(id) {
+async function nextPosition() {
   try {
-    const res = await fetch(`/api/admin/menu/${id}`, { credentials: 'include' });
-    const j = await res.json();
-    if (!j.ok || !j.item) return alert('Fehler beim Laden des Menüpunktes.');
-
-    const i = j.item;
-
-    // alten Editor schließen
-    document.getElementById('menuEditor')?.remove();
-
-    // Editor-Container direkt unter der Tabelle einfügen
-    const table = document.getElementById('mnTable');
-    const wrapper = document.createElement('div');
-    wrapper.id = 'menuEditor';
-    wrapper.style.marginTop = '16px';
-    wrapper.style.padding = '16px';
-    wrapper.style.background = '#1a2235';
-    wrapper.style.borderRadius = '10px';
-    wrapper.style.boxShadow = '0 0 10px rgba(0,0,0,0.4)';
-    wrapper.innerHTML = `
-      <h3 style="margin-top:0">📝 Inhalt bearbeiten – ${i.title}</h3>
-      <textarea id="editContent" style="width:100%;min-height:260px;background:#0f1425;color:#fff;border-radius:8px;padding:10px;">${i.content_html || ''}</textarea>
-      <div style="margin-top:12px;display:flex;gap:10px;">
-        <button id="btnSaveEdit">💾 Speichern</button>
-        <button id="btnCancelEdit">❌ Abbrechen</button>
-      </div>
-    `;
-
-    table.insertAdjacentElement('afterend', wrapper);
-    wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    document.getElementById('btnCancelEdit').addEventListener('click', () => wrapper.remove());
-
-    document.getElementById('btnSaveEdit').addEventListener('click', async () => {
-      const html = document.getElementById('editContent').value;
-      try {
-        const upd = await fetch(`/api/admin/menu/${id}`, {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: i.title,
-            content_html: html,
-            location: i.location,
-            is_active: i.is_active,
-            position: i.position
-          })
-        });
-        const js = await upd.json();
-        if (js.ok) {
-          wrapper.remove();
-          window.loadMenuItems();
-        } else {
-          alert('Fehler beim Speichern ⚠️');
-        }
-      } catch (err) {
-        alert('Fehler: ' + err.message);
-      }
-    });
-  } catch (err) {
-    alert('Fehler: ' + err.message);
+    const j = await api('/api/admin/menu');
+    const items = j.items || [];
+    const max = items.reduce((m, x) => Math.max(m, (x.position ?? 0)), 0);
+    return max + 1;
+  } catch {
+    return 0;
   }
 }
 
-// === Löschen ===
-async function deleteMenu(id) {
+// Zeile speichern (Titel, Ort, Aktiv, Prio)
+async function onSaveRow(tr) {
+  const id = tr.dataset.id;
+  const title = tr.querySelector('.mn-title').value.trim();
+  const location = tr.querySelector('.mn-location').value;
+  const is_active = tr.querySelector('.mn-active').checked;
+  const position = Number(tr.querySelector('.mn-position').value || 0);
+
+  try {
+    await api(`/api/admin/menu/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, location, is_active, position }),
+    });
+    toast('Gespeichert');
+    await loadMenuItems();
+  } catch (err) {
+    alert('Fehler beim Speichern: ' + err.message);
+  }
+}
+
+// Zeile löschen
+async function onDeleteRow(id) {
   if (!confirm('Wirklich löschen?')) return;
   try {
-    const res = await fetch(`/api/admin/menu/${id}`, {
-      method: 'DELETE',
-      credentials: 'include'
-    });
-    const j = await res.json();
-    if (j.ok) {
-      document.querySelector(`tr[data-id="${id}"]`)?.remove();
-    } else {
-      alert('Fehler beim Löschen ⚠️');
-    }
+    await api(`/api/admin/menu/${id}`, { method: 'DELETE' });
+    toast('Gelöscht');
+    await loadMenuItems();
   } catch (err) {
-    alert('Fehler: ' + err.message);
+    alert('Fehler beim Löschen: ' + err.message);
   }
+}
+
+/* -------------------------------- Texteditor ------------------------------- */
+
+async function onEditRow(id) {
+  // Einzelnen Menüpunkt laden (mit Fallback auf alten Alias)
+  let j;
+  try {
+    j = await api(`/api/admin/menu/${id}`);
+  } catch (_) {
+    // Fallback auf alten Editor-Alias (falls bei dir noch aktiv)
+    j = await api(`/api/admin/editor/${id}`);
+  }
+  if (!j.ok || !j.item) {
+    return alert('Fehler beim Laden des Menüpunktes.');
+  }
+
+  const item = j.item;
+
+  // Editor-Container bereitstellen
+  let editor = document.getElementById('mnEditor');
+  if (!editor) {
+    editor = document.createElement('div');
+    editor.id = 'mnEditor';
+    editor.style.marginTop = '20px';
+    editor.innerHTML = `
+      <div class="card" style="padding:16px;">
+        <h3 id="mnEditorTitle" style="margin:0 0 10px 0;">Inhalt bearbeiten</h3>
+        <textarea id="mnEditorArea" rows="12" style="width:100%;"></textarea>
+        <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;">
+          <button id="mnEditorSave" class="btn">Speichern</button>
+          <button id="mnEditorCancel" class="btn" style="background:#555;">Schließen</button>
+        </div>
+      </div>
+    `;
+    // Hinter die Tabelle hängen
+    const table = document.querySelector('#mnTable') || document.querySelector('#menuItemsTable');
+    (table?.parentElement || document.body).appendChild(editor);
+  }
+
+  // Inhalte setzen
+  document.getElementById('mnEditorTitle').textContent = `Inhalt: ${item.title} (ID ${item.id})`;
+  document.getElementById('mnEditorArea').value = item.content_html || '';
+
+  // Buttons
+  document.getElementById('mnEditorCancel').onclick = () => editor.remove();
+  document.getElementById('mnEditorSave').onclick = async () => {
+    try {
+      await api(`/api/admin/menu/${item.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content_html: document.getElementById('mnEditorArea').value,
+        }),
+      });
+      toast('Inhalt gespeichert');
+      editor.remove();
+      await loadMenuItems();
+    } catch (err) {
+      alert('Fehler beim Speichern: ' + err.message);
+    }
+  };
 }
