@@ -283,64 +283,98 @@ async function onDeleteRow(id) {
   }
 }
 
-/* -------------------------------- Texteditor ------------------------------- */
+/* ------------------------------ Texteditor ------------------------------ */
 
 async function onEditRow(id) {
-  // Einzelnen Menüpunkt laden (mit Fallback auf alten Alias)
+  // Menüpunkt laden
   let j;
   try {
     j = await api(`/api/admin/menu/${id}`);
   } catch (_) {
-    // Fallback auf alten Editor-Alias (falls bei dir noch aktiv)
     j = await api(`/api/admin/editor/${id}`);
   }
-  if (!j.ok || !j.item) {
-    return alert('Fehler beim Laden des Menüpunktes.');
+
+  if (!j || !j.ok || !j.item) {
+    console.error('Editor-Fehler:', j);
+    return alert('Konnte Menüpunkt nicht laden.');
   }
 
   const item = j.item;
+  const tr = document.querySelector(`tr[data-id="${id}"]`);
+  const existing = document.querySelector(`#editor-${id}`);
+  if (existing) existing.remove();
 
-  // Editor-Container bereitstellen
-  let editor = document.getElementById('mnEditor');
-  if (!editor) {
-    editor = document.createElement('div');
-    editor.id = 'mnEditor';
-    editor.style.marginTop = '20px';
-    editor.innerHTML = `
-      <div class="card" style="padding:16px;">
-        <h3 id="mnEditorTitle" style="margin:0 0 10px 0;">Inhalt bearbeiten</h3>
-        <textarea id="mnEditorArea" rows="12" style="width:100%;"></textarea>
-        <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;">
-          <button id="mnEditorSave" class="btn">Speichern</button>
-          <button id="mnEditorCancel" class="btn" style="background:#555;">Schließen</button>
+  const row = document.createElement('tr');
+  row.id = `editor-${id}`;
+  row.innerHTML = `
+    <td colspan="6">
+      <div style="background:#1b2341;padding:14px;border-radius:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <label style="color:#ffd600;">Ort:</label>
+          <select id="edit-loc-${id}" style="flex:1;padding:6px;border-radius:6px;background:#11182a;color:#fff;">
+            <option value="login" ${item.location === 'login' ? 'selected' : ''}>Login</option>
+            <option value="live" ${item.location === 'live' ? 'selected' : ''}>Live</option>
+            <option value="both" ${item.location === 'both' ? 'selected' : ''}>Beide</option>
+          </select>
+        </div>
+
+        <!-- Toolbar -->
+        <div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:6px;">
+          <button type="button" onclick="document.execCommand('undo',false,null)">↩️</button>
+          <button type="button" onclick="document.execCommand('redo',false,null)">↪️</button>
+          <button type="button" onclick="document.execCommand('bold',false,null)">B</button>
+          <button type="button" onclick="document.execCommand('italic',false,null)">I</button>
+          <select id="fontSize-${id}" style="padding:3px 6px;border-radius:6px;background:#11182a;color:#fff;">
+            <option value="1">Klein</option>
+            <option value="3" selected>Mittel</option>
+            <option value="5">Groß</option>
+          </select>
+          <button type="button" onclick="document.execCommand('fontSize',false,document.getElementById('fontSize-${id}').value)">🔤</button>
+          <button type="button" onclick="document.execCommand('insertText',false,'♥')">♥</button>
+          <button type="button" onclick="document.execCommand('insertText',false,'♣')">♣</button>
+          <button type="button" onclick="document.execCommand('insertText',false,'♦')">♦</button>
+          <button type="button" onclick="document.execCommand('insertText',false,'♠')">♠</button>
+        </div>
+
+        <!-- Textfeld -->
+        <div id="edit-area-${id}" contenteditable="true"
+          style="min-height:120px;padding:10px;background:#0f1633;color:#fff;border:1px solid #333;border-radius:6px;white-space:pre-wrap;">${item.content_html
+            ?.replace(/<\/?[^>]+(>|$)/g, '') || ''}</div>
+
+        <!-- Buttons -->
+        <div style="margin-top:10px;text-align:right;display:flex;justify-content:flex-end;gap:10px;">
+          <button id="cancel-${id}" style="padding:6px 12px;background:#555;color:#fff;border:none;border-radius:8px;cursor:pointer;">Schließen</button>
+          <button id="save-${id}" style="padding:6px 12px;background:#ff4d00;color:#fff;border:none;border-radius:8px;cursor:pointer;">💾 Speichern</button>
         </div>
       </div>
-    `;
-    // Hinter die Tabelle hängen
-    const table = document.querySelector('#mnTable') || document.querySelector('#menuItemsTable');
-    (table?.parentElement || document.body).appendChild(editor);
-  }
+    </td>
+  `;
 
-  // Inhalte setzen
-  document.getElementById('mnEditorTitle').textContent = `Inhalt: ${item.title} (ID ${item.id})`;
-  document.getElementById('mnEditorArea').value = item.content_html || '';
+  tr.after(row);
 
-  // Buttons
-  document.getElementById('mnEditorCancel').onclick = () => editor.remove();
-  document.getElementById('mnEditorSave').onclick = async () => {
+  // === Buttons ===
+  document.getElementById(`cancel-${id}`).onclick = () => row.remove();
+
+  document.getElementById(`save-${id}`).onclick = async () => {
+    const newLoc = document.querySelector(`#edit-loc-${id}`).value;
+    const newText = document.querySelector(`#edit-area-${id}`).innerText.trim();
+
     try {
-      await api(`/api/admin/menu/${item.id}`, {
+      await api(`/api/admin/menu/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content_html: document.getElementById('mnEditorArea').value,
+          location: newLoc,
+          content_html: newText // reiner Text
         }),
       });
-      toast('Inhalt gespeichert');
-      editor.remove();
+      toast('✅ Gespeichert');
+      row.remove();
       await loadMenuItems();
     } catch (err) {
       alert('Fehler beim Speichern: ' + err.message);
     }
   };
 }
+
+console.log('Editor-Load-Debug', j);
