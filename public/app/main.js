@@ -619,8 +619,33 @@ function deleteLastSentence() {
 }
 window.deleteLastSentence = deleteLastSentence;
 
-// === Buy-in Button → Weiterleitung auf pay.html ===
-document.getElementById('buyinBtn')?.addEventListener('click', () => {
-  window.location.href = '/app/pay.html';
+// === Buy-in Button → Stripe Checkout starten ===
+document.getElementById('buyinBtn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('buyinBtn');
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/pay/stripe/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ pack_id: 't10k' }) // wichtig!
+    });
+
+    const data = await res.json();
+    if (!data.ok || !data.url) {
+      alert(`Stripe Fehler: ${data.error || 'Keine URL'}`);
+      return;
+    }
+
+    // ✅ Weiterleitung zu Stripe
+    window.location.href = data.url;
+  } catch (err) {
+    console.error('[Stripe Fehler]', err);
+    alert('Fehler beim Stripe Checkout!');
+  } finally {
+    btn.disabled = false;
+  }
 });
+
 

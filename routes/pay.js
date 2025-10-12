@@ -22,8 +22,9 @@ router.post('/stripe/checkout', requireAuth, async (req, res) => {
     const pack = PACKS[packId];
     if (!pack) return res.status(400).json({ ok:false, error:'unknown_pack' });
 
-    const successUrl = `${process.env.APP_BASE_URL}/pay-success.html?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl  = `${process.env.APP_BASE_URL}/pay-cancel.html`;
+    const successUrl = `${process.env.APP_BASE_URL}/app/pay-success.html?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl  = `${process.env.APP_BASE_URL}/app/pay-cancel.html`;
+
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
