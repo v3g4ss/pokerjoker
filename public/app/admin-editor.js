@@ -368,3 +368,12 @@ async function onEditRow(id) {
   };
 }
 
+// === Startpunkt beim Laden ===
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    console.log('[INIT] Untermenü laden...');
+    await loadMenuItems(); // lädt alle Menüeinträge
+  } catch (err) {
+    console.error('[INIT ERROR]', err);
+  }
+});
