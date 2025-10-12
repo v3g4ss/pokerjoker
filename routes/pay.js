@@ -10,8 +10,8 @@ const requireAuth = require('../middleware/requireAuth');
  * Du kannst die Packs nach Bedarf anpassen.
  */
 const PACKS = {
-  t10k: { tokens: 10000, amount: 999,  name: '10.000 Tokens' },
-  t25k: { tokens: 25000, amount: 1999, name: '25.000 Tokens' },
+  t10k: { tokens: 10000, amount: 3500,  name: '10.000 Tokens' },
+  t25k: { tokens: 25000, amount: 6000, name: '25.000 Tokens' },
 };
 
 // === STRIPE CHECKOUT erzeugen ===
