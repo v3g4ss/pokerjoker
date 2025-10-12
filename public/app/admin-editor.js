@@ -146,108 +146,112 @@ async function loadPromptSettings() {
   });
 }
 
-/* ------------------------------- Menüverwaltung ----------------------------- */
+/* ------------------------------ Texteditor ------------------------------ */
 
-// Menü laden
-async function loadMenuItems() {
-  const tbody = getTbody();
-  if (!tbody) return;
-
+// Editor öffnen
+async function onEditRow(id) {
+  let j;
   try {
-    const j = await api('/api/admin/menu');
-    const items = (j.items || []).slice().sort(byPositionThenId);
-    tbody.innerHTML = '';
-    items.forEach(drawRow);
+    j = await api(`/api/admin/menu/${id}`);
   } catch (err) {
-    console.error('[MENU LOAD ERROR]', err.message);
+    console.error('Fehler beim Laden des Menüpunktes:', err);
+    return alert('Fehler beim Laden des Menüpunktes.');
   }
-}
 
-function byPositionThenId(a, b) {
-  const pa = (a.position ?? 0) | 0;
-  const pb = (b.position ?? 0) | 0;
-  if (pa !== pb) return pa - pb;
-  return (a.id | 0) - (b.id | 0);
-}
+  if (!j || !j.ok || !j.item) {
+    console.error('Editor-Fehler:', j);
+    return alert('Konnte Menüpunkt nicht laden.');
+  }
 
-// Neue Zeile zeichnen
-function drawRow(item) {
-  const tbody = getTbody();
-  if (!tbody) return;
+  const item = j.item;
+  const tr = document.querySelector(`tr[data-id="${id}"]`);
+  const existing = document.querySelector(`#editor-${id}`);
+  if (existing) existing.remove();
 
-  const tr = document.createElement('tr');
-  tr.dataset.id = item.id;
+  const row = document.createElement('tr');
+  row.id = `editor-${id}`;
+  row.innerHTML = `
+    <td colspan="6">
+      <div style="background:#1b2341;padding:14px;border-radius:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <label style="color:#ffd600;">Ort:</label>
+          <select id="edit-loc-${id}" style="flex:1;padding:6px;border-radius:6px;background:#11182a;color:#fff;">
+            <option value="login" ${item.location === 'login' ? 'selected' : ''}>Login</option>
+            <option value="live" ${item.location === 'live' ? 'selected' : ''}>Live</option>
+            <option value="both" ${item.location === 'both' ? 'selected' : ''}>Beide</option>
+          </select>
+        </div>
 
-  const active = !!item.is_active;
-  const pos = (item.position ?? 0);
+        <!-- Toolbar -->
+        <div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:6px;">
+          <button type="button" onclick="document.execCommand('undo',false,null)">↩️</button>
+          <button type="button" onclick="document.execCommand('redo',false,null)">↪️</button>
+          <button type="button" onclick="document.execCommand('bold',false,null)" style="font-weight:bold;">B</button>
+          <button type="button" onclick="document.execCommand('italic',false,null)" style="font-style:italic;">I</button>
+          <button type="button" onclick="document.execCommand('insertText',false,'♠')">♠</button>
+          <button type="button" onclick="document.execCommand('insertText',false,'♥')">♥</button>
+          <button type="button" onclick="document.execCommand('insertText',false,'♦')">♦</button>
+          <button type="button" onclick="document.execCommand('insertText',false,'♣')">♣</button>
+        </div>
 
-  tr.innerHTML = `
-    <td>${item.id}</td>
-    <td><input type="text" class="mn-title" value="${escapeHtml(item.title || '')}" /></td>
-    <td>
-      <select class="mn-location">
-        <option value="login" ${item.location === 'login' ? 'selected' : ''}>Login</option>
-        <option value="live"  ${item.location === 'live'  ? 'selected' : ''}>Live</option>
-        <option value="both"  ${item.location === 'both'  ? 'selected' : ''}>Beide</option>
-      </select>
-    </td>
-    <td style="text-align:center;">
-      <input type="checkbox" class="mn-active" ${active ? 'checked' : ''} />
-    </td>
-    <td style="width:92px;">
-      <input type="number" min="0" step="1" class="mn-position" value="${pos}" />
-    </td>
-    <td>
-      <button class="mn-save"   title="Speichern">💾</button>
-      <button class="mn-edit"   title="Inhalt bearbeiten">✏️</button>
-      <button class="mn-delete" title="Löschen">🗑</button>
+        <!-- Textbereich -->
+        <div id="edit-area-${id}" contenteditable="true"
+          style="min-height:120px;padding:10px;background:#0f1633;color:#fff;border:1px solid #333;border-radius:6px;white-space:pre-wrap;">
+          ${escapeHtml(item.content_html || '')}
+        </div>
+
+        <!-- Buttons -->
+        <div style="margin-top:10px;text-align:right;display:flex;justify-content:flex-end;gap:10px;">
+          <button id="cancel-${id}" style="padding:6px 12px;background:#555;color:#fff;border:none;border-radius:8px;cursor:pointer;">Schließen</button>
+          <button id="save-${id}" style="padding:6px 12px;background:#ff4d00;color:#fff;border:none;border-radius:8px;cursor:pointer;">💾 Speichern</button>
+        </div>
+      </div>
     </td>
   `;
 
-  // Events
-  tr.querySelector('.mn-save')  .addEventListener('click', () => onSaveRow(tr));
-  tr.querySelector('.mn-edit')  .addEventListener('click', () => onEditRow(item.id));
-  tr.querySelector('.mn-delete').addEventListener('click', () => onDeleteRow(item.id));
+  tr.after(row);
 
-  tbody.appendChild(tr);
+  // === Aktionen ===
+  document.getElementById(`cancel-${id}`).onclick = () => row.remove();
+
+  document.getElementById(`save-${id}`).onclick = async () => {
+    const newLoc = document.querySelector(`#edit-loc-${id}`).value;
+    const newText = document.querySelector(`#edit-area-${id}`).innerText.trim();
+
+    try {
+      await api(`/api/admin/menu/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: newLoc,
+          content_html: newText
+        }),
+      });
+      toast('✅ Gespeichert');
+      row.remove();
+      await loadMenuItems();
+    } catch (err) {
+      alert('Fehler beim Speichern: ' + err.message);
+    }
+  };
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c =>
-    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])
-  );
+/* ----------------------------- Hilfsfunktionen ----------------------------- */
+
+function getTbody() {
+  return document.querySelector('#menuTable tbody');
 }
 
-// Neuen Menüpunkt erstellen
-async function onCreate() {
-  try {
-    const j = await api('/api/admin/menu', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Neuer Punkt',
-        content_html: '<p>Inhalt kommt später</p>',
-        position: await nextPosition(),
-        location: 'both',
-        is_active: true,
-      }),
-    });
-    toast('Menüpunkt angelegt');
-    await loadMenuItems();
-  } catch (err) {
-    alert('Fehler beim Anlegen: ' + err.message);
-  }
+// Standardisierte API-Helfer
+async function api(url, options = {}) {
+  const res = await fetch(url, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || 'API Fehler');
+  return data;
 }
 
-async function nextPosition() {
-  try {
-    const j = await api('/api/admin/menu');
-    const items = j.items || [];
-    const max = items.reduce((m, x) => Math.max(m, (x.position ?? 0)), 0);
-    return max + 1;
-  } catch {
-    return 0;
-  }
+function toast(msg) {
+  console.log('[INFO]', msg);
 }
 
 // Zeile speichern (Titel, Ort, Aktiv, Prio)
@@ -283,19 +287,17 @@ async function onDeleteRow(id) {
   }
 }
 
-/* ------------------------------ Texteditor ------------------------------ */
-
+// ====================== RICHTIGER TEXTEDITOR (mit Formatierung) ======================
 async function onEditRow(id) {
-  // Menüpunkt laden
   let j;
   try {
     j = await api(`/api/admin/menu/${id}`);
-  } catch (_) {
-    j = await api(`/api/admin/editor/${id}`);
+  } catch (err) {
+    console.error('Fehler beim Laden:', err);
+    return alert('Fehler beim Laden des Menüpunktes.');
   }
 
   if (!j || !j.ok || !j.item) {
-    console.error('Editor-Fehler:', j);
     return alert('Konnte Menüpunkt nicht laden.');
   }
 
@@ -320,26 +322,18 @@ async function onEditRow(id) {
 
         <!-- Toolbar -->
         <div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:6px;">
-          <button type="button" onclick="document.execCommand('undo',false,null)">↩️</button>
-          <button type="button" onclick="document.execCommand('redo',false,null)">↪️</button>
           <button type="button" onclick="document.execCommand('bold',false,null)">B</button>
           <button type="button" onclick="document.execCommand('italic',false,null)">I</button>
-          <select id="fontSize-${id}" style="padding:3px 6px;border-radius:6px;background:#11182a;color:#fff;">
-            <option value="1">Klein</option>
-            <option value="3" selected>Mittel</option>
-            <option value="5">Groß</option>
-          </select>
-          <button type="button" onclick="document.execCommand('fontSize',false,document.getElementById('fontSize-${id}').value)">🔤</button>
-          <button type="button" onclick="document.execCommand('insertText',false,'♥')">♥</button>
-          <button type="button" onclick="document.execCommand('insertText',false,'♣')">♣</button>
-          <button type="button" onclick="document.execCommand('insertText',false,'♦')">♦</button>
-          <button type="button" onclick="document.execCommand('insertText',false,'♠')">♠</button>
+          <button type="button" onclick="document.execCommand('underline',false,null)">U</button>
+          <button type="button" onclick="document.execCommand('insertUnorderedList',false,null)">• Liste</button>
+          <button type="button" onclick="document.execCommand('createLink',false,prompt('URL:'))">🔗 Link</button>
         </div>
 
         <!-- Textfeld -->
         <div id="edit-area-${id}" contenteditable="true"
-          style="min-height:120px;padding:10px;background:#0f1633;color:#fff;border:1px solid #333;border-radius:6px;white-space:pre-wrap;">${item.content_html
-            ?.replace(/<\/?[^>]+(>|$)/g, '') || ''}</div>
+          style="min-height:140px;padding:10px;background:#0f1633;color:#fff;border:1px solid #333;border-radius:6px;white-space:pre-wrap;">
+          ${item.content_html || ''}
+        </div>
 
         <!-- Buttons -->
         <div style="margin-top:10px;text-align:right;display:flex;justify-content:flex-end;gap:10px;">
@@ -352,21 +346,18 @@ async function onEditRow(id) {
 
   tr.after(row);
 
-  // === Buttons ===
+  // === Aktionen ===
   document.getElementById(`cancel-${id}`).onclick = () => row.remove();
 
   document.getElementById(`save-${id}`).onclick = async () => {
     const newLoc = document.querySelector(`#edit-loc-${id}`).value;
-    const newText = document.querySelector(`#edit-area-${id}`).innerText.trim();
+    const html = document.querySelector(`#edit-area-${id}`).innerHTML.trim();
 
     try {
       await api(`/api/admin/menu/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: newLoc,
-          content_html: newText // reiner Text
-        }),
+        body: JSON.stringify({ location: newLoc, content_html: html }),
       });
       toast('✅ Gespeichert');
       row.remove();
