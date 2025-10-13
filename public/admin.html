@@ -118,32 +118,37 @@
     </div>
   </div>
 
-  <!-- Users -->
-  <div style="margin:12px 0;">
-    <input id="userSearch" placeholder="Suche E-Mail…">
-    <button id="btnSearch">Suchen</button>
+ <!-- Users -->
+<div class="card" style="margin:12px 0;">
+  <h2>User anlegen</h2>
+  <div class="row" style="gap:8px">
+    <input id="newUserEmail" type="email" placeholder="E-Mail">
+    <input id="newUserPass" type="password" placeholder="Passwort (min 6)">
+    <label class="row" style="gap:6px">
+      <input id="newUserAdmin" type="checkbox"> Admin
+    </label>
+    <button id="btnCreateUser">Anlegen</button>
+    <span id="createUserStatus" class="muted"></span>
   </div>
+</div>
 
-  <div class="card" style="margin:12px 0;">
-    <h2>User anlegen</h2>
-    <div class="row" style="gap:8px">
-      <input id="newUserEmail" type="email" placeholder="E-Mail">
-      <input id="newUserPass" type="password" placeholder="Passwort (min 6)">
-      <label class="row" style="gap:6px"><input id="newUserAdmin" type="checkbox"> Admin</label>
-      <button id="btnCreateUser">Anlegen</button>
-      <span id="createUserStatus" class="muted"></span>
-    </div>
-  </div>
+<!-- User-Suche -->
+<div class="user-search-row">
+  <input id="userSearch" placeholder="Suche E-Mail…" />
+  <button id="btnSearch">Suchen</button>
+</div>
 
-  <table id="usersTbl">
-    <thead>
-      <tr>
-        <th>ID</th><th>E-Mail</th><th>Admin</th><th>Status</th>
-        <th>Tokens</th><th>Purchased</th><th>Aktion</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<!-- User-Tabelle -->
+<table id="usersTbl">
+  <thead>
+    <tr>
+      <th>ID</th><th>E-Mail</th><th>Admin</th><th>Status</th>
+      <th>Tokens</th><th>Purchased</th><th>Aktion</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
   <div style="margin:12px 0;">
     <button id="prevPage">← Prev</button>
     <span id="pageInfo"></span>
