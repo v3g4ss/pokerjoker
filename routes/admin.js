@@ -213,27 +213,16 @@ router.get('/users', async (req, res) => {
     let where = '', params = [];
     if (q) { where = 'WHERE u.email ILIKE $1'; params.push(`%${q}%`); }
 
-    const itemsSql = `
+   const itemsSql = `
   SELECT
     u.id,
     u.email,
     COALESCE(u.is_admin,false)  AS is_admin,
     COALESCE(u.is_locked,false) AS is_locked,
-    COALESCE((
-      SELECT tl.balance_after
-      FROM public.token_ledger tl
-      WHERE tl.user_id = u.id
-      ORDER BY tl.id DESC
-      LIMIT 1
-    ), 0) AS tokens,
-    COALESCE((
-      SELECT SUM(CASE
-        WHEN tl2.delta > 0 AND LOWER(COALESCE(tl2.reason,'')) LIKE '%buy%'
-        THEN tl2.delta ELSE 0 END)
-      FROM public.token_ledger tl2
-      WHERE tl2.user_id = u.id
-    ), 0) AS purchased
+    COALESCE(v.balance, 0)   AS tokens,
+    COALESCE(v.purchased, 0) AS purchased
   FROM public.users u
+  LEFT JOIN v_user_balances_live v ON v.user_id = u.id
   ${where ? where + ' AND ' : 'WHERE '} u.deleted_at IS NULL
   ORDER BY u.id ASC
   LIMIT ${limit} OFFSET ${off};
