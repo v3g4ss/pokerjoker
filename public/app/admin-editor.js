@@ -1,18 +1,21 @@
 // public/app/admin-editor.js
 // 🃏 Poker Joker – Admin: Prompt + Menü-Editor (mit Prio, Texteditor & Add-Funktion)
 
-document.addEventListener('DOMContentLoaded', () => init());
+(() => {
+  console.log('[admin-editor] Modul gestartet');
 
-async function init() {
-  const addBtn = document.getElementById('mnAdd');
-  const tbody = getTbody();
-  if (!tbody) return;
+  init(); // direkt starten, kein Event nötig
 
-  addBtn?.addEventListener('click', onCreate);
+  async function init() {
+    const addBtn = document.getElementById('mnAdd');
+    const tbody = getTbody();
+    if (!tbody) return;
 
-  await loadPromptSettings().catch(() => {});
-  await loadMenuItems();
-}
+    addBtn?.addEventListener('click', onCreate);
+
+    await loadPromptSettings().catch(() => {});
+    await loadMenuItems();
+  }
 
 /* ------------------------------ Utils ------------------------------ */
 
@@ -312,3 +315,4 @@ async function onEditRow(id) {
     }
   };
 }
+})();

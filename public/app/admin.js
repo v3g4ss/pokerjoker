@@ -364,4 +364,25 @@ $('#btnLoadLast200')?.addEventListener('click', async ()=>{
       st && (st.textContent = 'Fehler');
     }
   });
+
+  // === Lazy Load: Untermenü-Editor nur bei Bedarf laden ===
+const submenuCard = document.querySelector('#submenuCard');
+
+if (submenuCard) {
+  submenuCard.addEventListener('click', async () => {
+    if (!window.editorLoaded) {
+      console.log('[admin] Lade admin-editor.js …');
+      try {
+        await import('/app/js/admin-editor.js?v=20250831');
+        window.editorLoaded = true;
+        console.log('[admin] admin-editor.js erfolgreich geladen!');
+      } catch (err) {
+        console.error('[admin] Fehler beim Laden von admin-editor.js:', err);
+      }
+    } else {
+      console.log('[admin] admin-editor.js ist bereits aktiv.');
+    }
+  });
+}
+
 })();
