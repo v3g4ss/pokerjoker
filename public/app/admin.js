@@ -373,7 +373,7 @@ if (submenuCard) {
     if (!window.editorLoaded) {
       console.log('[admin] Lade admin-editor.js …');
       try {
-        await import('/app/js/admin-editor.js?v=20250831');
+        await import('/app/admin-editor.js?v=20250831');
         window.editorLoaded = true;
         console.log('[admin] admin-editor.js erfolgreich geladen!');
       } catch (err) {
