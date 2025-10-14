@@ -252,18 +252,20 @@ $('#btnLoadUserLedger')?.addEventListener('click', async ()=>{
 });
 
 // === User-Summary mit Filter und E-Mail ===
-$('#btnLoadSummary')?.addEventListener('click', async ()=> {
+$('#btnLoadSummary')?.addEventListener('click', async () => {
   const q = $('#summarySearch')?.value || '';
   const rows = await api(`/admin/summary?q=${encodeURIComponent(q)}`);
   const tb = $('#summaryTbl tbody'); if (!tb) return; tb.innerHTML = '';
-  rows.forEach(r=>{
+  rows.forEach(r => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${r.user_id}</td>
       <td>${r.email}</td>
+      <td>${r.last_update ? new Date(r.last_update).toLocaleString() : '-'}</td>
       <td>${r.gekauft ?? 0}</td>
       <td>${r.ausgegeben ?? 0}</td>
-      <td><b>${r.aktuell ?? 0}</b></td>`;
+      <td><b>${r.aktuell ?? 0}</b></td>
+    `;
     tb.appendChild(tr);
   });
 });

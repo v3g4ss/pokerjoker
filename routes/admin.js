@@ -437,7 +437,7 @@ router.get('/summary', async (req, res) => {
   try {
     const search = (req.query.q || '').trim().toLowerCase();
     const { rows } = await pool.query(`
-      SELECT user_id, email, gekauft, ausgegeben, aktuell
+      SELECT user_id, email, last_update, gekauft, ausgegeben, aktuell
       FROM v_token_user_summary
       WHERE ($1 = '' OR LOWER(email) LIKE '%' || $1 || '%')
       ORDER BY user_id ASC
