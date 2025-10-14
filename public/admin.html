@@ -141,11 +141,15 @@
 <!-- User-Tabelle -->
 <table id="usersTbl">
   <thead>
-    <tr>
-      <th>ID</th><th>E-Mail</th><th>Admin</th><th>Status</th>
-      <th>Tokens</th><th>Purchased</th><th>Aktion</th>
-    </tr>
-  </thead>
+  <tr>
+    <th>User</th>
+    <th>E-Mail</th>
+    <th>gekauft</th>
+    <th>in</th>
+    <th>out</th>
+    <th>Balance</th>
+  </tr>
+</thead>
   <tbody></tbody>
 </table>
 
@@ -219,6 +223,10 @@
   <!-- Summary -->
   <section class="card">
     <h2>User-Summary <button class="right" id="btnLoadSummary">Aktualisieren</button></h2>
+    <div class="summary-search">
+    <input id="summarySearch" placeholder="E-Mail suchen…" class="input" />
+    <button id="summaryReload" class="btn">🔍</button>
+  </div>
     <table id="summaryTbl">
       <thead><tr><th>User</th><th>gekauft</th><th>in</th><th>out</th><th>Balance</th></tr></thead>
       <tbody></tbody>

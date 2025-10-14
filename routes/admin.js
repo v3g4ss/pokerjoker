@@ -433,20 +433,24 @@ router.get('/ledger/last200', async (_req, res) => {
 });
 
 // GET /api/admin/summary
-router.get('/summary', async (_req, res) => {
+router.get('/summary', async (req, res) => {
   try {
+    const search = (req.query.q || '').trim().toLowerCase();
+
     const { rows } = await pool.query(`
       SELECT
-        u.id          AS user_id,
-        u.email       AS email,
-        s.gekauft     AS purchased,
-        s."in"        AS in_sum,
-        s.out         AS out_sum,
+        u.id           AS user_id,
+        u.email        AS email,
+        s.gekauft      AS purchased,
+        s."in"         AS in_sum,
+        s.out          AS out_sum,
         s.balance
       FROM public.v_token_user_summary s
       JOIN public.users u ON u.id = s.user
+      WHERE ($1 = '' OR LOWER(u.email) LIKE '%' || $1 || '%')
       ORDER BY u.id ASC
-    `);
+    `, [search]);
+
     res.json(rows || []);
   } catch (e) {
     console.error('GET /api/admin/summary', e);
