@@ -254,9 +254,16 @@ $('#btnLoadUserLedger')?.addEventListener('click', async ()=>{
 // === User-Summary mit Filter und E-Mail ===
 $('#btnLoadSummary')?.addEventListener('click', async ()=> {
   const rows = await api('/admin/summary');
-  const tb = $('#summaryTbl tbody'); 
-  if (!tb) return; 
+  const tb = $('#summaryTbl tbody');
+  if (!tb) return;
   tb.innerHTML = '';
+
+  if (!rows || !rows.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="6" style="text-align:center; opacity:0.7;">Keine Daten gefunden</td>`;
+    tb.appendChild(tr);
+    return;
+  }
 
   rows.forEach(r => {
     const tr = document.createElement('tr');
