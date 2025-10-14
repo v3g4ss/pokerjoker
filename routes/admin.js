@@ -383,60 +383,75 @@ router.get('/users/:id/balance', async (req, res) => {
 // GET /api/admin/ledger/user/:id
 router.get('/ledger/user/:id', async (req, res) => {
   try {
-    const userId = toInt(req.params.id);
-    if (!Number.isInteger(userId)) return res.status(400).json({ ok:false, message:'Ungültige ID' });
+    const userId = parseInt(req.params.id);
+    if (!Number.isInteger(userId))
+      return res.status(400).json({ ok: false, message: 'Ungültige ID' });
 
-    const { rows } = await pool.query(
-      `SELECT id, user_id, delta, reason, balance_after, created_at
-         FROM public.token_ledger
-        WHERE user_id = $1
-        ORDER BY id DESC
-        LIMIT 200`,
-      [userId]
-    );
+    // 🔥 Holt Ledger + Balance aus der neuen View
+    const { rows } = await pool.query(`
+      SELECT 
+        id,
+        user_id,
+        delta,
+        reason,
+        balance,
+        created_at
+      FROM public.v_token_ledger_detailed
+      WHERE user_id = $1
+      ORDER BY id DESC
+      LIMIT 200
+    `, [userId]);
+
     res.json(rows || []);
   } catch (e) {
     console.error('GET /api/admin/ledger/user/:id', e);
-    res.status(500).json({ ok:false, message:'Fehler beim Laden des Ledgers' });
+    res.status(500).json({ ok: false, message: 'Fehler beim Laden des Ledgers' });
   }
 });
 
 // GET /api/admin/ledger/last200
 router.get('/ledger/last200', async (_req, res) => {
   try {
-    const { rows } = await pool.query(
-      `SELECT id, user_id, delta, reason, balance_after, created_at
-         FROM public.token_ledger
-        ORDER BY id DESC
-        LIMIT 200`
-    );
+    // 🔥 Holt die letzten 200 Einträge global
+    const { rows } = await pool.query(`
+      SELECT 
+        id,
+        user_id,
+        delta,
+        reason,
+        balance,
+        created_at
+      FROM public.v_token_ledger_last200
+      ORDER BY id DESC
+      LIMIT 200
+    `);
     res.json(rows || []);
   } catch (e) {
     console.error('GET /api/admin/ledger/last200', e);
-    res.status(500).json({ ok:false, message:'Fehler beim Laden der letzten Einträge' });
+    res.status(500).json({ ok: false, message: 'Fehler beim Laden der letzten Einträge' });
   }
 });
 
 // GET /api/admin/summary
 router.get('/summary', async (_req, res) => {
   try {
-    const { rows } = await pool.query(
-      `SELECT
-         tl.user_id,
-         SUM(CASE WHEN tl.delta > 0 THEN tl.delta ELSE 0 END)  AS in_sum,
-         SUM(CASE WHEN tl.delta < 0 THEN -tl.delta ELSE 0 END) AS out_sum,
-         SUM(CASE WHEN LOWER(COALESCE(tl.reason,'')) LIKE '%buy%' THEN tl.delta ELSE 0 END) AS purchased,
-         MAX(tl.balance_after) AS balance
-       FROM public.token_ledger tl
-       GROUP BY tl.user_id
-       ORDER BY tl.user_id ASC`
-    );
+    const { rows } = await pool.query(`
+      SELECT
+        user     AS user_id,
+        gekauft  AS purchased,
+        "in"     AS in_sum,
+        out      AS out_sum,
+        balance
+      FROM public.v_token_user_summary
+      ORDER BY user ASC
+    `);
     res.json(rows || []);
   } catch (e) {
     console.error('GET /api/admin/summary', e);
     res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
   }
 });
+
 
 // Live-Konfig holen
 router.get('/bot/config', async (req, res) => {
