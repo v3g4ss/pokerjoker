@@ -220,18 +220,67 @@
     </table>
   </section>
 
-  <!-- Summary -->
-  <section class="card">
-    <h2>User-Summary <button class="right" id="btnLoadSummary">Aktualisieren</button></h2>
-    <div class="summary-search">
+ <!-- Summary -->
+<section class="card">
+  <h2>User-Summary 
+    <button class="right btn" id="btnLoadSummary">🔄 Aktualisieren</button>
+  </h2>
+
+  <div class="summary-search">
     <input id="summarySearch" placeholder="E-Mail suchen…" class="input" />
-    <button id="summaryReload" class="btn">🔍</button>
+    <button id="btnSearchSummary" class="btn">🔍</button>
   </div>
-    <table id="summaryTbl">
-      <thead><tr><th>User</th><th>gekauft</th><th>in</th><th>out</th><th>Balance</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
+
+  <table id="summaryTbl" class="data-table">
+    <thead>
+      <tr>
+        <th>User</th>
+        <th>E-Mail</th>
+        <th>Time</th>
+        <th>Gekauft</th>
+        <th>Ausgegeben</th>
+        <th>Aktuell</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+// === User Summary laden ===
+async function loadSummary() {
+  try {
+    const q = $('#summarySearch')?.value || '';
+    const res = await api(`/admin/summary?q=${encodeURIComponent(q)}`);
+    const rows = res || [];
+    const tb = $('#summaryTbl tbody');
+    if (!tb) return;
+    tb.innerHTML = '';
+
+    if (!rows.length) {
+      tb.innerHTML = `<tr><td colspan="6" style="text-align:center;opacity:0.7;">Keine Daten gefunden</td></tr>`;
+      return;
+    }
+
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.user_id}</td>
+        <td>${r.email}</td>
+        <td>${r.last_update ? new Date(r.last_update).toLocaleString() : '-'}</td>
+        <td>${r.gekauft ?? 0}</td>
+        <td>${r.ausgegeben ?? 0}</td>
+        <td><b>${r.aktuell ?? 0}</b></td>
+      `;
+      tb.appendChild(tr);
+    });
+  } catch (err) {
+    console.error('Fehler beim Laden der Summary:', err);
+  }
+}
+
+// === Buttons ===
+$('#btnLoadSummary')?.addEventListener('click', loadSummary);
+$('#btnSearchSummary')?.addEventListener('click', loadSummary);
 
   <!-- Letzte Ledger -->
   <section class="card">
