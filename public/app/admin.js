@@ -252,10 +252,12 @@ $('#btnLoadUserLedger')?.addEventListener('click', async ()=>{
 });
 
 // === User-Summary mit Filter und E-Mail ===
-$('#btnLoadSummary')?.addEventListener('click', async () => {
-  const q = $('#summarySearch')?.value || '';
-  const rows = await api(`/admin/summary?q=${encodeURIComponent(q)}`);
-  const tb = $('#summaryTbl tbody'); if (!tb) return; tb.innerHTML = '';
+$('#btnLoadSummary')?.addEventListener('click', async ()=> {
+  const rows = await api('/admin/summary');
+  const tb = $('#summaryTbl tbody'); 
+  if (!tb) return; 
+  tb.innerHTML = '';
+
   rows.forEach(r => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
