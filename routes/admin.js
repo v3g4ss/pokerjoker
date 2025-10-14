@@ -387,14 +387,14 @@ router.get('/ledger/user/:id', async (req, res) => {
     if (!Number.isInteger(userId))
       return res.status(400).json({ ok: false, message: 'Ungültige ID' });
 
-    // 🔥 Holt Ledger + Balance aus der neuen View
+    // GET /api/admin/ledger/user/:id
     const { rows } = await pool.query(`
       SELECT 
         id,
         user_id,
         delta,
         reason,
-        balance,
+        balance AS balance_after,
         created_at
       FROM public.v_token_ledger_detailed
       WHERE user_id = $1
@@ -412,14 +412,14 @@ router.get('/ledger/user/:id', async (req, res) => {
 // GET /api/admin/ledger/last200
 router.get('/ledger/last200', async (_req, res) => {
   try {
-    // 🔥 Holt die letzten 200 Einträge global
+    // GET /api/admin/ledger/last200
     const { rows } = await pool.query(`
       SELECT 
         id,
         user_id,
         delta,
         reason,
-        balance,
+        balance AS balance_after,
         created_at
       FROM public.v_token_ledger_last200
       ORDER BY id DESC
@@ -436,14 +436,15 @@ router.get('/ledger/last200', async (_req, res) => {
 router.get('/summary', async (_req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT
-        user     AS user_id,
-        gekauft  AS purchased,
-        "in"     AS in_sum,
-        out      AS out_sum,
-        balance
-      FROM public.v_token_user_summary
-      ORDER BY user ASC
+      SELECT 
+      user AS user_id,
+      gekauft AS purchased,
+      "in" AS in_sum,
+      out AS out_sum,
+      balance
+    FROM public.v_token_user_summary
+ORDER BY user_id ASC
+
     `);
     res.json(rows || []);
   } catch (e) {
