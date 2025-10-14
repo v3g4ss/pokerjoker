@@ -252,28 +252,22 @@ $('#btnLoadUserLedger')?.addEventListener('click', async ()=>{
 });
 
 // === User-Summary mit Filter und E-Mail ===
-$('#btnLoadSummary')?.addEventListener('click', async ()=> loadSummary());
-
-$('#summaryReload')?.addEventListener('click', async ()=> loadSummary());
-
-async function loadSummary() {
+$('#btnLoadSummary')?.addEventListener('click', async ()=> {
   const q = $('#summarySearch')?.value || '';
   const rows = await api(`/admin/summary?q=${encodeURIComponent(q)}`);
-  const tb = $('#summaryTbl tbody');
-  if (!tb) return;
-  tb.innerHTML = '';
+  const tb = $('#summaryTbl tbody'); if (!tb) return; tb.innerHTML = '';
   rows.forEach(r=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="mono">${r.user_id}</td>
-      <td>${r.email ?? '-'}</td>
+      <td>${r.user}</td>
+      <td>${r.email}</td>
       <td>${r.purchased ?? 0}</td>
       <td>${r.in_sum ?? 0}</td>
       <td>${r.out_sum ?? 0}</td>
       <td><b>${r.balance ?? 0}</b></td>`;
     tb.appendChild(tr);
   });
-}
+});
 
 $('#btnLoadLast200')?.addEventListener('click', async ()=>{
   const rows = await api('/admin/ledger/last200');
