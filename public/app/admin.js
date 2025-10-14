@@ -292,15 +292,17 @@ $('#btnLoadLast200')?.addEventListener('click', async ()=>{
 // === User Summary laden ===
 async function loadSummary() {
   try {
-    const q = $('#summarySearch')?.value || '';
-    const res = await api(`/admin/summary?q=${encodeURIComponent(q)}`);
-    const rows = res || [];
-    const tb = $('#summaryTbl tbody');
+    const q = document.getElementById('summarySearch')?.value || '';
+    const res = await fetch(`/api/admin/summary?q=${encodeURIComponent(q)}`, {
+      credentials: 'include'
+    });
+    const rows = await res.json();
+    const tb = document.querySelector('#summaryTbl tbody');
     if (!tb) return;
     tb.innerHTML = '';
 
     if (!rows.length) {
-      tb.innerHTML = `<tr><td colspan="6" style="text-align:center;opacity:0.7;">Keine Daten gefunden</td></tr>`;
+      tb.innerHTML = '<tr><td colspan="6" style="text-align:center;opacity:0.7;">Keine Daten gefunden</td></tr>';
       return;
     }
 
@@ -321,14 +323,11 @@ async function loadSummary() {
   }
 }
 
-// === Buttons ===
-document.getElementById('btnLoadSummary')?.addEventListener('click', loadSummary);
-document.getElementById('btnSearchSummary')?.addEventListener('click', loadSummary);
-
-
-// === Buttons ===
-$('#btnLoadSummary')?.addEventListener('click', loadSummary);
-$('#btnSearchSummary')?.addEventListener('click', loadSummary);
+// === Buttons verbinden ===
+document.getElementById('btnLoadSummary')
+  ?.addEventListener('click', loadSummary);
+document.getElementById('btnSearchSummary')
+  ?.addEventListener('click', loadSummary);
 
 // ---- Chat-Mode UI (KB_ONLY / KB_PREFERRED / LLM_ONLY) ---------------------
 (async function(){
