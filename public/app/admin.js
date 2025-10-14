@@ -289,6 +289,42 @@ $('#btnLoadLast200')?.addEventListener('click', async ()=>{
   });
 });
 
+// === User Summary laden ===
+async function loadSummary() {
+  try {
+    const q = $('#summarySearch')?.value || '';
+    const res = await api(`/admin/summary?q=${encodeURIComponent(q)}`);
+    const rows = res || [];
+    const tb = $('#summaryTbl tbody');
+    if (!tb) return;
+    tb.innerHTML = '';
+
+    if (!rows.length) {
+      tb.innerHTML = `<tr><td colspan="6" style="text-align:center;opacity:0.7;">Keine Daten gefunden</td></tr>`;
+      return;
+    }
+
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.user_id}</td>
+        <td>${r.email}</td>
+        <td>${r.last_update ? new Date(r.last_update).toLocaleString() : '-'}</td>
+        <td>${r.gekauft ?? 0}</td>
+        <td>${r.ausgegeben ?? 0}</td>
+        <td><b>${r.aktuell ?? 0}</b></td>
+      `;
+      tb.appendChild(tr);
+    });
+  } catch (err) {
+    console.error('Fehler beim Laden der Summary:', err);
+  }
+}
+
+// === Buttons ===
+$('#btnLoadSummary')?.addEventListener('click', loadSummary);
+$('#btnSearchSummary')?.addEventListener('click', loadSummary);
+
 // ---- Chat-Mode UI (KB_ONLY / KB_PREFERRED / LLM_ONLY) ---------------------
 (async function(){
   const status = $('#chatModeStatus');
