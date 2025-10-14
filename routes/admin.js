@@ -436,15 +436,14 @@ router.get('/ledger/last200', async (_req, res) => {
 router.get('/summary', async (_req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT 
-      user AS user_id,
-      gekauft AS purchased,
-      "in" AS in_sum,
-      out AS out_sum,
-      balance
-    FROM public.v_token_user_summary
-ORDER BY user_id ASC
-
+      SELECT
+        user      AS user_id,
+        gekauft   AS purchased,
+        "in"      AS in_sum,
+        out       AS out_sum,
+        balance
+      FROM public.v_token_user_summary
+      ORDER BY user ASC
     `);
     res.json(rows || []);
   } catch (e) {
@@ -452,7 +451,6 @@ ORDER BY user_id ASC
     res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
   }
 });
-
 
 // Live-Konfig holen
 router.get('/bot/config', async (req, res) => {
