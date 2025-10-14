@@ -322,6 +322,11 @@ async function loadSummary() {
 }
 
 // === Buttons ===
+document.getElementById('btnLoadSummary')?.addEventListener('click', loadSummary);
+document.getElementById('btnSearchSummary')?.addEventListener('click', loadSummary);
+
+
+// === Buttons ===
 $('#btnLoadSummary')?.addEventListener('click', loadSummary);
 $('#btnSearchSummary')?.addEventListener('click', loadSummary);
 
