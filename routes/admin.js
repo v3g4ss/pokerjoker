@@ -437,26 +437,17 @@ router.get('/summary', async (req, res) => {
   try {
     const search = (req.query.q || '').trim().toLowerCase();
     const { rows } = await pool.query(`
-      SELECT
-        u.id AS user,
-        u.email,
-        COALESCE(SUM(CASE WHEN t.delta > 0 THEN t.delta ELSE 0 END), 0) AS in_sum,
-        COALESCE(SUM(CASE WHEN t.delta < 0 THEN -t.delta ELSE 0 END), 0) AS out_sum,
-        COALESCE(SUM(CASE WHEN LOWER(t.reason) LIKE '%buy%' THEN t.delta ELSE 0 END), 0) AS purchased,
-        MAX(t.balance_after) AS balance
-      FROM users u
-      LEFT JOIN token_ledger t ON t.user_id = u.id
-      WHERE ($1 = '' OR LOWER(u.email) LIKE '%' || $1 || '%')
-      GROUP BY u.id, u.email
-      ORDER BY u.id ASC
+      SELECT user_id, email, gekauft, ausgegeben, aktuell
+      FROM v_token_user_summary
+      WHERE ($1 = '' OR LOWER(email) LIKE '%' || $1 || '%')
+      ORDER BY user_id ASC
     `, [search]);
     res.json(rows || []);
   } catch (e) {
     console.error('GET /api/admin/summary', e);
-    res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
+    res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
   }
 });
-
 
 // Live-Konfig holen
 router.get('/bot/config', async (req, res) => {

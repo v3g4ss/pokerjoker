@@ -259,12 +259,11 @@ $('#btnLoadSummary')?.addEventListener('click', async ()=> {
   rows.forEach(r=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${r.user}</td>
+      <td>${r.user_id}</td>
       <td>${r.email}</td>
-      <td>${r.purchased ?? 0}</td>
-      <td>${r.in_sum ?? 0}</td>
-      <td>${r.out_sum ?? 0}</td>
-      <td><b>${r.balance ?? 0}</b></td>`;
+      <td>${r.gekauft ?? 0}</td>
+      <td>${r.ausgegeben ?? 0}</td>
+      <td><b>${r.aktuell ?? 0}</b></td>`;
     tb.appendChild(tr);
   });
 });
