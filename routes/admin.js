@@ -437,13 +437,15 @@ router.get('/summary', async (_req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT
-        user      AS user_id,
-        gekauft   AS purchased,
-        "in"      AS in_sum,
-        out       AS out_sum,
-        balance
-      FROM public.v_token_user_summary
-      ORDER BY user ASC
+        u.id          AS user_id,
+        u.email       AS email,
+        s.gekauft     AS purchased,
+        s."in"        AS in_sum,
+        s.out         AS out_sum,
+        s.balance
+      FROM public.v_token_user_summary s
+      JOIN public.users u ON u.id = s.user
+      ORDER BY u.id ASC
     `);
     res.json(rows || []);
   } catch (e) {
