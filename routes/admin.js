@@ -432,29 +432,20 @@ router.get('/ledger/last200', async (_req, res) => {
   }
 });
 
-// === Summary (zieht alles aus v_user_balances_live) ===
+// GET /api/admin/summary
 router.get('/summary', async (req, res) => {
   try {
-    const q = String(req.query.q || '').trim().toLowerCase();
-
+    const search = (req.query.q || '').trim().toLowerCase();
     const { rows } = await pool.query(`
-      SELECT
-        v.user_id AS id,
-        u.email,
-        v.purchased AS gekauft,
-        (v.purchased - v.balance) AS ausgegeben,
-        v.balance AS aktuell,
-        v.updated_at AS time
-      FROM public.v_user_balances_live v
-      JOIN public.users u ON u.id = v.user_id
-      WHERE ($1 = '' OR LOWER(u.email) LIKE '%' || $1 || '%')
-      ORDER BY u.id ASC
-    `, [q]);
-
+      SELECT user_id, email, last_update, gekauft, ausgegeben, aktuell
+      FROM v_token_user_summary
+      WHERE ($1 = '' OR LOWER(email) LIKE '%' || $1 || '%')
+      ORDER BY user_id ASC
+    `, [search]);
     res.json(rows || []);
-  } catch (err) {
-    console.error('[ADMIN SUMMARY]', err);
-    res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
+  } catch (e) {
+    console.error('GET /api/admin/summary', e);
+    res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
   }
 });
 
