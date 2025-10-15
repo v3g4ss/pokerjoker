@@ -437,19 +437,18 @@ router.get('/summary', async (req, res) => {
   try {
     const search = (req.query.q || '').trim().toLowerCase();
 
+    // Wir holen direkt den selben Wert aus users.tokens wie in "User anlegen"
     const { rows } = await pool.query(`
       SELECT 
         u.id           AS user_id,
         u.email        AS email,
         u.updated_at   AS last_update,
-        COALESCE(u.purchased, 0) AS gekauft,   -- ✅ aus users
-        COALESCE(SUM(CASE WHEN tl.delta < 0 THEN ABS(tl.delta) ELSE 0 END), 0) AS ausgegeben,  -- ✅ Verbrauch aus Ledger
-        COALESCE(u.tokens, 0) AS tokens        -- ✅ aktueller Stand wie in "User anlegen"
+        COALESCE(u.purchased, 0) AS gekauft,  -- gekauft bleibt wie gehabt
+        0              AS ausgegeben,          -- bleibt leer
+        COALESCE(u.tokens, 0) AS tokens        -- 💥 exakt der Wert aus User anlegen!
       FROM public.users u
-      LEFT JOIN public.token_ledger tl ON tl.user_id = u.id
       WHERE ($1 = '' OR LOWER(u.email) LIKE '%' || $1 || '%')
         AND u.deleted_at IS NULL
-      GROUP BY u.id, u.email, u.updated_at, u.purchased, u.tokens
       ORDER BY u.id ASC
     `, [search]);
 
@@ -459,7 +458,6 @@ router.get('/summary', async (req, res) => {
     res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
   }
 });
-
 
 // Live-Konfig holen
 router.get('/bot/config', async (req, res) => {

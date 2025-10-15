@@ -273,7 +273,7 @@ $('#btnLoadSummary')?.addEventListener('click', async ()=> {
       <td>${r.last_update ? new Date(r.last_update).toLocaleString() : '-'}</td>
       <td>${r.gekauft ?? 0}</td>
       <td>${r.ausgegeben ?? 0}</td>
-      <td><b>${r.aktuell ?? 0}</b></td>
+      <td><b>${r.tokens ?? 0}</b></td>
     `;
     tb.appendChild(tr);
   });
@@ -314,7 +314,7 @@ async function loadSummary() {
         <td>${r.last_update ? new Date(r.last_update).toLocaleString() : '-'}</td>
         <td>${r.gekauft ?? 0}</td>
         <td>${r.ausgegeben ?? 0}</td>
-        <td><b>${r.aktuell ?? 0}</b></td>
+        <td><b>${r.tokens ?? 0}</b></td>
       `;
       tb.appendChild(tr);
     });
