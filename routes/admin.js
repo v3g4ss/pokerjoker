@@ -432,22 +432,33 @@ router.get('/ledger/last200', async (_req, res) => {
   }
 });
 
-// GET /api/admin/summary
+// === GET /api/admin/summary ===
+// Zeigt exakt denselben Tokenstand wie "User anlegen"
 router.get('/summary', async (req, res) => {
   try {
     const search = (req.query.q || '').trim().toLowerCase();
+
     const { rows } = await pool.query(`
-      SELECT user_id, email, last_update, gekauft, ausgegeben, aktuell
-      FROM v_token_user_summary
-      WHERE ($1 = '' OR LOWER(email) LIKE '%' || $1 || '%')
-      ORDER BY user_id ASC
+      SELECT 
+        v.user_id        AS user_id,
+        u.email          AS email,
+        v.updated_at     AS last_update,
+        v.purchased      AS gekauft,
+        (v.purchased - v.balance) AS ausgegeben,
+        v.balance        AS tokens  -- ✅ hier der echte Tokenstand!
+      FROM public.v_user_balances_live v
+      JOIN public.users u ON u.id = v.user_id
+      WHERE ($1 = '' OR LOWER(u.email) LIKE '%' || $1 || '%')
+      ORDER BY v.user_id ASC
     `, [search]);
+
     res.json(rows || []);
   } catch (e) {
     console.error('GET /api/admin/summary', e);
     res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
   }
 });
+
 
 // Live-Konfig holen
 router.get('/bot/config', async (req, res) => {
