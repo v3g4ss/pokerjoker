@@ -432,31 +432,29 @@ router.get('/ledger/last200', async (_req, res) => {
   }
 });
 
-// GET /api/admin/summary
+// === Summary (zieht alles aus v_user_balances_live) ===
 router.get('/summary', async (req, res) => {
   try {
     const q = String(req.query.q || '').trim().toLowerCase();
 
     const { rows } = await pool.query(`
-      SELECT 
-        u.id                         AS user_id,
+      SELECT
+        v.user_id AS id,
         u.email,
-        tla.last_action              AS last_update,
-        COALESCE(v.purchased, 0)     AS gekauft,
-        GREATEST(COALESCE(v.purchased,0) - COALESCE(v.balance,0), 0) AS ausgegeben,
-        COALESCE(v.balance, 0)       AS aktuell           -- << exakt wie "Tokens" in User anlegen
-      FROM public.users u
-      LEFT JOIN public.v_user_balances_live v ON v.user_id = u.id
-      LEFT JOIN public.v_token_last_action  tla ON tla.user_id = u.id
+        v.purchased AS gekauft,
+        (v.purchased - v.balance) AS ausgegeben,
+        v.balance AS aktuell,
+        v.updated_at AS time
+      FROM public.v_user_balances_live v
+      JOIN public.users u ON u.id = v.user_id
       WHERE ($1 = '' OR LOWER(u.email) LIKE '%' || $1 || '%')
-        AND u.deleted_at IS NULL
       ORDER BY u.id ASC
     `, [q]);
 
     res.json(rows || []);
-  } catch (e) {
-    console.error('GET /api/admin/summary', e);
-    res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
+  } catch (err) {
+    console.error('[ADMIN SUMMARY]', err);
+    res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
   }
 });
 
