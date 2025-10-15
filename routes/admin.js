@@ -432,24 +432,24 @@ router.get('/ledger/last200', async (_req, res) => {
   }
 });
 
-// === GET /api/admin/summary ===
-// Zeigt exakt denselben Tokenstand wie "User anlegen"
+// GET /api/admin/summary
 router.get('/summary', async (req, res) => {
   try {
     const search = (req.query.q || '').trim().toLowerCase();
 
+    // EXAKT derselbe Wert wie in "User anlegen" → users.tokens
     const { rows } = await pool.query(`
       SELECT 
-        v.user_id        AS user_id,
-        u.email          AS email,
-        v.updated_at     AS last_update,
-        v.purchased      AS gekauft,
-        (v.purchased - v.balance) AS ausgegeben,
-        v.balance        AS tokens  -- ✅ hier der echte Tokenstand!
-      FROM public.v_user_balances_live v
-      JOIN public.users u ON u.id = v.user_id
+        u.id           AS user_id,
+        u.email        AS email,
+        u.updated_at   AS last_update,
+        u.purchased    AS gekauft,
+        0              AS ausgegeben,   -- bleibt leer
+        u.tokens       AS tokens        -- ✅ derselbe Wert wie "User anlegen"
+      FROM public.users u
       WHERE ($1 = '' OR LOWER(u.email) LIKE '%' || $1 || '%')
-      ORDER BY v.user_id ASC
+      AND u.deleted_at IS NULL
+      ORDER BY u.id ASC
     `, [search]);
 
     res.json(rows || []);
