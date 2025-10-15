@@ -435,13 +435,24 @@ router.get('/ledger/last200', async (_req, res) => {
 // GET /api/admin/summary
 router.get('/summary', async (req, res) => {
   try {
-    const search = (req.query.q || '').trim().toLowerCase();
+    const q = String(req.query.q || '').trim().toLowerCase();
+
     const { rows } = await pool.query(`
-      SELECT user_id, email, last_update, gekauft, ausgegeben, aktuell
-      FROM v_token_user_summary
-      WHERE ($1 = '' OR LOWER(email) LIKE '%' || $1 || '%')
-      ORDER BY user_id ASC
-    `, [search]);
+      SELECT 
+        u.id                         AS user_id,
+        u.email,
+        tla.last_action              AS last_update,
+        COALESCE(v.purchased, 0)     AS gekauft,
+        GREATEST(COALESCE(v.purchased,0) - COALESCE(v.balance,0), 0) AS ausgegeben,
+        COALESCE(v.balance, 0)       AS aktuell           -- << exakt wie "Tokens" in User anlegen
+      FROM public.users u
+      LEFT JOIN public.v_user_balances_live v ON v.user_id = u.id
+      LEFT JOIN public.v_token_last_action  tla ON tla.user_id = u.id
+      WHERE ($1 = '' OR LOWER(u.email) LIKE '%' || $1 || '%')
+        AND u.deleted_at IS NULL
+      ORDER BY u.id ASC
+    `, [q]);
+
     res.json(rows || []);
   } catch (e) {
     console.error('GET /api/admin/summary', e);
