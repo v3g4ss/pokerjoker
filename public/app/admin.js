@@ -26,7 +26,7 @@ document.getElementById('logoutBtn')?.addEventListener('click', async () => {
 // ---- KPIs -----------------------------------------------------------------
 async function loadStats() {
   try {
-    const s = await api('/admin/stats');
+    const s = (await api('/admin/stats')).stats; // ✅ FIX HIER!
 
     const set = (sel, val) => {
       const n = document.querySelector(sel);
