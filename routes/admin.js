@@ -137,56 +137,53 @@ async function sendMailOptional(app, { to, subject, text }) {
 router.get('/stats', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
+      WITH
+      customers AS (
+        SELECT COUNT(*)::bigint AS val
+        FROM public.users
+        WHERE is_admin = false AND deleted_at IS NULL
+      ),
+      admins AS (
+        SELECT COUNT(*)::bigint AS val
+        FROM public.users
+        WHERE is_admin = true AND deleted_at IS NULL
+      ),
+      messages_total AS (
+        SELECT COUNT(*)::bigint AS val
+        FROM public.messages
+      ),
+      messages_new AS (
+        SELECT COUNT(*)::bigint AS val
+        FROM public.messages m
+        WHERE NOT EXISTS (
+          SELECT 1 FROM public.message_replies r
+          WHERE r.message_id = m.id
+        )
+      ),
+      purchased AS (
+        SELECT COALESCE(SUM(delta),0)::bigint AS val
+        FROM public.token_ledger
+        WHERE delta > 0 AND LOWER(COALESCE(reason,'')) LIKE 'buy%'
+      ),
+      admin_granted AS (
+        SELECT COALESCE(SUM(delta),0)::bigint AS val
+        FROM public.token_ledger
+        WHERE delta > 0 AND LOWER(COALESCE(reason,'')) LIKE 'admin%'
+      ),
+      tokens_in_circulation AS (
+        SELECT COALESCE(SUM(tokens),0)::bigint AS val
+        FROM public.users
+        WHERE deleted_at IS NULL
+      )
       SELECT
-        -- Kunden: alle User ohne Adminrechte und nicht gelöscht
-        (SELECT COUNT(*) 
-         FROM public.users 
-         WHERE is_admin = false 
-           AND deleted_at IS NULL
-        ) AS customers,
-
-        -- Admins: nur aktive Admins (nicht gelöscht)
-        (SELECT COUNT(*) 
-         FROM public.users 
-         WHERE is_admin = true 
-           AND deleted_at IS NULL
-        ) AS admins,
-
-        -- Gesamtanzahl aller Nachrichten
-        (SELECT COUNT(*) FROM public.messages) AS messages_total,
-
-        -- Neue Nachrichten: ohne Antwort in message_replies
-        (SELECT COUNT(*) 
-         FROM public.messages m
-         WHERE NOT EXISTS (
-           SELECT 1 FROM public.message_replies r
-           WHERE r.message_id = m.id
-         )
-        ) AS messages_new,
-
-        -- Tokens gekauft (Buy-Ins)
-        COALESCE((
-          SELECT SUM(delta)::bigint
-          FROM public.token_ledger
-          WHERE delta > 0 
-            AND LOWER(COALESCE(reason, '')) LIKE 'buy%'
-        ), 0) AS purchased,
-
-        -- Tokens durch Admin vergeben (+)
-        COALESCE((
-          SELECT SUM(delta)::bigint
-          FROM public.token_ledger
-          WHERE delta > 0 
-            AND LOWER(COALESCE(reason, '')) LIKE 'admin%'
-        ), 0) AS admin_granted,
-
-        -- Tokens im Umlauf (nur aktive User)
-        (SELECT COALESCE(SUM(tokens), 0)
-         FROM public.users
-         WHERE deleted_at IS NULL
-        ) AS tokens_in_circulation
-      FROM public.users
-      LIMIT 1;
+        (SELECT val FROM customers)             AS customers,
+        (SELECT val FROM admins)                AS admins,
+        (SELECT val FROM messages_total)        AS messages_total,
+        (SELECT val FROM messages_new)          AS messages_new,
+        (SELECT val FROM purchased)             AS purchased,
+        (SELECT val FROM admin_granted)         AS admin_granted,
+        (SELECT val FROM tokens_in_circulation) AS tokens_in_circulation
+      ;
     `);
 
     res.json({ ok: true, stats: rows[0] || {} });
@@ -195,6 +192,7 @@ router.get('/stats', requireAuth, requireAdmin, async (req, res) => {
     res.status(500).json({ ok: false, message: 'Fehler beim Laden der KPIs' });
   }
 });
+
 
 // Admin setzt Passwort eines Users
 // POST /api/admin/users/:id/password  { new_password }
