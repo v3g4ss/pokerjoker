@@ -397,7 +397,7 @@ router.get('/users/:id/balance', async (req, res) => {
 });
 
 // ============================================================
-// GET /api/admin/ledger/user/:id  → User-Ledger mit Pagination
+// GET /api/admin/ledger/user/:id  → User-Ledger (kompatibel + verbessert)
 // ============================================================
 router.get('/ledger/user/:id', async (req, res) => {
   try {
@@ -406,12 +406,11 @@ router.get('/ledger/user/:id', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'Ungültige ID' });
     }
 
-    // Pagination: ?page=1&limit=10
     const page  = parseInt(req.query.page)  || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 200; // fallback auf 200 wie früher
     const offset = (page - 1) * limit;
 
-    // Hauptquery
+    // Hauptquery: jetzt stabil, liefert auch Email
     const { rows } = await pool.query(`
       SELECT 
         l.id,
@@ -428,25 +427,14 @@ router.get('/ledger/user/:id', async (req, res) => {
       LIMIT $2 OFFSET $3
     `, [userId, limit, offset]);
 
-    // Gesamtanzahl für Pagination
-    const { rows: totalRows } = await pool.query(`
-      SELECT COUNT(*) FROM public.v_token_ledger_detailed WHERE user_id = $1
-    `, [userId]);
-
-    res.json({
-      ok: true,
-      data: rows,
-      total: parseInt(totalRows[0].count, 10),
-      page,
-      pages: Math.ceil(totalRows[0].count / limit)
-    });
+    // alte Kompatibilität: rows direkt zurückgeben
+    res.json(rows || []);
 
   } catch (e) {
     console.error('GET /api/admin/ledger/user/:id', e);
     res.status(500).json({ ok: false, message: 'Fehler beim Laden des Ledgers' });
   }
 });
-
 
 // GET /api/admin/ledger/last200
 router.get('/ledger/last200', async (_req, res) => {
