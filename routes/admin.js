@@ -185,7 +185,9 @@ router.get('/stats', requireAuth, requireAdmin, async (req, res) => {
          FROM public.users
          WHERE deleted_at IS NULL
         ) AS tokens_in_circulation
-    `);   // <── diese schließende Klammer hat gefehlt!
+      FROM public.users
+      LIMIT 1;
+    `);
 
     res.json({ ok: true, stats: rows[0] || {} });
   } catch (e) {
