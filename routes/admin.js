@@ -153,9 +153,7 @@ router.get('/stats', requireAuth, requireAdmin, async (req, res) => {
         ) AS admins,
 
         -- Gesamtanzahl aller Nachrichten
-        (SELECT COUNT(*) 
-         FROM public.messages
-        ) AS messages_total,
+        (SELECT COUNT(*) FROM public.messages) AS messages_total,
 
         -- Neue Nachrichten: ohne Antwort in message_replies
         (SELECT COUNT(*) 
@@ -187,7 +185,7 @@ router.get('/stats', requireAuth, requireAdmin, async (req, res) => {
          FROM public.users
          WHERE deleted_at IS NULL
         ) AS tokens_in_circulation
-    `);
+    `);   // <── diese schließende Klammer hat gefehlt!
 
     res.json({ ok: true, stats: rows[0] || {} });
   } catch (e) {
