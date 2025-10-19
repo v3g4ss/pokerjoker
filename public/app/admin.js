@@ -240,41 +240,98 @@ document.getElementById('btnCreateUser')?.addEventListener('click', async ()=>{
 });
 
 // ---- Ledger / Reports -----------------------------------------------------
-$('#btnLoadUserLedger')?.addEventListener('click', async () => {
-  const uid = parseInt($('#ledgerUserId')?.value, 10);
-  if (!Number.isInteger(uid)) return;
+(() => {
+  const btnLoad = document.getElementById('btnLoadUserLedger');
+  const inputId = document.getElementById('ledgerUserId');
+  const tbody   = document.querySelector('#userLedgerTbl tbody');
+  const pager   = document.getElementById('ledgerPager');
 
-  // hole die Daten mit Pagination
-  const res = await api(`/admin/ledger/user/${uid}?page=1&limit=10`);
-  const data = Array.isArray(res.data) ? res.data : res; // Rückwärtskompatibilität
+  let page = 1;
+  const limit = 10;
 
-  const tb = $('#userLedgerTbl tbody');
-  if (!tb) return;
-  tb.innerHTML = `
-    <tr>
-      <th>ID</th>
-      <th>E-Mail</th>
-      <th>Tokens gekauft</th>
-      <th>Reason</th>
-      <th>Balance</th>
-      <th>Time</th>
-    </tr>
-  `;
+  async function loadLedger() {
+    const userId = parseInt(inputId?.value || '');
+    if (!userId) return alert('Bitte gültige User-ID eingeben!');
 
-  // Zeilen befüllen
-  (data || []).forEach(r => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.id}</td>
-      <td>${r.email || '-'}</td>
-      <td>${r.delta > 0 ? '+' + r.delta : r.delta}</td>
-      <td>${r.reason || ''}</td>
-      <td>${r.balance_after ?? '-'}</td>
-      <td>${new Date(r.created_at).toLocaleString()}</td>
-    `;
-    tb.appendChild(tr);
+    try {
+      const res = await fetch(`/api/admin/ledger/user/${userId}?page=${page}&limit=${limit}`, {
+        credentials: 'include'
+      });
+      const data = await res.json();
+
+      // Rückwärtskompatibilität: data.data oder direktes Array
+      const list = Array.isArray(data.data) ? data.data : data;
+
+      // Tabellenkopf neu setzen
+      tbody.innerHTML = `
+        <tr>
+          <th>ID</th>
+          <th>E-Mail</th>
+          <th>Tokens gekauft</th>
+          <th>Reason</th>
+          <th>Balance</th>
+          <th>Time</th>
+        </tr>
+      `;
+
+      // Einträge rendern
+      (list || []).forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.id}</td>
+          <td>${r.email || '-'}</td>
+          <td class="${r.delta > 0 ? 'text-green' : 'text-red'}">
+            ${r.delta > 0 ? '+' + r.delta : r.delta}
+          </td>
+          <td>${r.reason || ''}</td>
+          <td>${r.balance_after ?? '-'}</td>
+          <td>${new Date(r.created_at).toLocaleString()}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Pagination
+      pager.innerHTML = '';
+      const totalPages = data.pages || 1;
+      if (totalPages > 1) {
+        const prev = document.createElement('button');
+        prev.textContent = '← Vorherige';
+        prev.disabled = page <= 1;
+        prev.addEventListener('click', () => {
+          if (page > 1) {
+            page--;
+            loadLedger();
+          }
+        });
+        pager.appendChild(prev);
+
+        const info = document.createElement('span');
+        info.textContent = `Seite ${page} von ${totalPages}`;
+        pager.appendChild(info);
+
+        const next = document.createElement('button');
+        next.textContent = 'Nächste →';
+        next.disabled = page >= totalPages;
+        next.addEventListener('click', () => {
+          if (page < totalPages) {
+            page++;
+            loadLedger();
+          }
+        });
+        pager.appendChild(next);
+      }
+
+    } catch (err) {
+      console.error('Ledger Fehler:', err);
+      alert('Fehler beim Laden des Ledgers.');
+    }
+  }
+
+  btnLoad?.addEventListener('click', () => {
+    page = 1;
+    loadLedger();
   });
-});
+})();
 
 // === User-Summary mit Filter und E-Mail ===
 $('#btnLoadSummary')?.addEventListener('click', async ()=> {

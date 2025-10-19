@@ -90,6 +90,36 @@
       border-radius: 10px;
       background: rgba(0,0,0,.2);
     }
+    .data-table th, .data-table td {
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.pager {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.pager button {
+  background: var(--color-accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.pager button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.text-green { color: #37c837; font-weight: 600; }
+.text-red   { color: #e64b4b; font-weight: 600; }
+
   </style>
 </head>
 <body>
@@ -208,18 +238,17 @@
   </div>
 
   <!-- User-Ledger -->
-  <section class="card">
-    <h2>User-Ledger</h2>
-    <div class="row">
-      <input id="ledgerUserId" type="number" min="1" value="1" placeholder="User ID">
-      <button id="btnLoadUserLedger">Laden</button>
-      <span class="muted">neueste 50</span>
-    </div>
-    <table id="userLedgerTbl">
-      <thead><tr><th>ID</th><th>Δ</th><th>Reason</th><th>Balance</th><th>Time</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
+   <div class="card">
+  <h2>User-Ledger</h2>
+  <input id="ledgerUserId" type="number" placeholder="User-ID eingeben" />
+  <button id="btnLoadUserLedger">Laden</button>
+
+  <table id="userLedgerTbl" class="data-table">
+    <tbody></tbody>
+  </table>
+
+  <div id="ledgerPager" class="pager"></div>
+</div>
 
  <!-- Summary -->
 <section class="card">
