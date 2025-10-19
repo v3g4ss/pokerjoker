@@ -402,34 +402,44 @@ router.get('/users/:id/balance', async (req, res) => {
 router.get('/ledger/user/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
-    if (!Number.isInteger(userId)) {
+    if (!Number.isInteger(userId))
       return res.status(400).json({ ok: false, message: 'Ungültige ID' });
-    }
 
-    const page  = parseInt(req.query.page)  || 1;
-    const limit = parseInt(req.query.limit) || 200; // fallback auf 200 wie früher
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
     const offset = (page - 1) * limit;
 
-    // Hauptquery: jetzt stabil, liefert auch Email
+    // Gesamtanzahl (für Pagination)
+    const countRes = await pool.query(`
+      SELECT COUNT(*) AS total
+      FROM public.v_token_ledger_detailed
+      WHERE user_id = $1
+    `, [userId]);
+    const total = Number(countRes.rows[0]?.total || 0);
+
+    // Paginierte Ergebnisse
     const { rows } = await pool.query(`
       SELECT 
-        l.id,
-        l.user_id,
-        u.email,
-        l.delta,
-        l.reason,
-        l.balance AS balance_after,
-        l.created_at
-      FROM public.v_token_ledger_detailed l
-      LEFT JOIN public.users u ON u.id = l.user_id
-      WHERE l.user_id = $1
-      ORDER BY l.created_at DESC
+        id,
+        user_id,
+        email,
+        delta,
+        reason,
+        balance AS balance_after,
+        created_at
+      FROM public.v_token_ledger_detailed
+      WHERE user_id = $1
+      ORDER BY id DESC
       LIMIT $2 OFFSET $3
     `, [userId, limit, offset]);
 
-    // alte Kompatibilität: rows direkt zurückgeben
-    res.json(rows || []);
-
+    res.json({
+      ok: true,
+      data: rows,
+      page,
+      total,
+      pages: Math.ceil(total / limit)
+    });
   } catch (e) {
     console.error('GET /api/admin/ledger/user/:id', e);
     res.status(500).json({ ok: false, message: 'Fehler beim Laden des Ledgers' });
