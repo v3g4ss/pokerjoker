@@ -257,12 +257,17 @@ document.getElementById('btnCreateUser')?.addEventListener('click', async ()=>{
       const res = await fetch(`/api/admin/ledger/user/${userId}?page=${page}&limit=${limit}`, {
         credentials: 'include'
       });
-      const data = await res.json();
+      const result = await res.json();
 
-      // Rückwärtskompatibilität: data.data oder direktes Array
-      const list = Array.isArray(data.data) ? data.data : data;
+      // Wenn Backend keine Pagination liefert, tun wir’s manuell
+      const list = Array.isArray(result) ? result : (result.data || []);
+      const total = result.total || list.length;
+      const totalPages = Math.ceil(total / limit);
 
-      // Tabellenkopf neu setzen
+      // Slice (Fallback wenn keine echte Pagination)
+      const visible = list.slice((page - 1) * limit, page * limit);
+
+      // Tabellenkopf
       tbody.innerHTML = `
         <tr>
           <th>ID</th>
@@ -274,8 +279,8 @@ document.getElementById('btnCreateUser')?.addEventListener('click', async ()=>{
         </tr>
       `;
 
-      // Einträge rendern
-      (list || []).forEach(r => {
+      // Zeilen rendern
+      visible.forEach(r => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${r.id}</td>
@@ -290,37 +295,32 @@ document.getElementById('btnCreateUser')?.addEventListener('click', async ()=>{
         tbody.appendChild(tr);
       });
 
-      // Pagination
+      // Blätterbuttons
       pager.innerHTML = '';
-      const totalPages = data.pages || 1;
-      if (totalPages > 1) {
-        const prev = document.createElement('button');
-        prev.textContent = '← Vorherige';
-        prev.disabled = page <= 1;
-        prev.addEventListener('click', () => {
-          if (page > 1) {
-            page--;
-            loadLedger();
-          }
-        });
-        pager.appendChild(prev);
+      const left = document.createElement('button');
+      left.textContent = '←';
+      left.disabled = page <= 1;
+      left.addEventListener('click', () => {
+        if (page > 1) {
+          page--;
+          loadLedger();
+        }
+      });
 
-        const info = document.createElement('span');
-        info.textContent = `Seite ${page} von ${totalPages}`;
-        pager.appendChild(info);
+      const right = document.createElement('button');
+      right.textContent = '→';
+      right.disabled = page >= totalPages;
+      right.addEventListener('click', () => {
+        if (page < totalPages) {
+          page++;
+          loadLedger();
+        }
+      });
 
-        const next = document.createElement('button');
-        next.textContent = 'Nächste →';
-        next.disabled = page >= totalPages;
-        next.addEventListener('click', () => {
-          if (page < totalPages) {
-            page++;
-            loadLedger();
-          }
-        });
-        pager.appendChild(next);
-      }
+      const info = document.createElement('span');
+      info.textContent = `Einträge ${(page - 1) * limit + 1}-${Math.min(page * limit, total)} von ${total}`;
 
+      pager.append(left, right, info);
     } catch (err) {
       console.error('Ledger Fehler:', err);
       alert('Fehler beim Laden des Ledgers.');
