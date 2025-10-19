@@ -136,29 +136,34 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
 }
 
 /* Ledger Layout */
+/* Ledger Layout – kompakte rechte Steuerung */
 .ledger-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   margin-bottom: 10px;
 }
+
 .ledger-controls {
   display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+.ledger-nav {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  margin-left: auto; /* schiebt Pfeile und Info nach rechts */
 }
-.ledger-controls input {
-  width: 80px;
-  background: #141e3f;
-  border: 1px solid #ad9844;
-  border-radius: 8px;
-  padding: 4px 6px;
-  color: #eaeaea;
-  text-align: center;
-}
+
 .ledger-info {
   font-size: 0.9em;
   color: #ccc;
+}
+
+#ledgerUserId {
+  width: 80px;
 }
 
 .text-green { color: #37c837; font-weight: 600; }
@@ -286,16 +291,17 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
   <h2>User-Ledger</h2>
 
   <div class="ledger-header">
-    <div class="ledger-controls">
+  <div class="ledger-controls">
+    <input id="ledgerUserId" type="number" placeholder="User-ID eingeben">
+    <button id="ledgerLoadBtn">Laden</button>
+
+    <div class="ledger-nav">
       <button class="btn-nav" id="ledgerPrev">←</button>
       <button class="btn-nav" id="ledgerNext">→</button>
-      <input id="ledgerUserId" type="number" placeholder="User-ID eingeben">
-      <button id="ledgerLoadBtn">Laden</button>
-    </div>
-    <div class="ledger-info">
       <span id="ledgerInfo">Einträge 1–10 von 166</span>
     </div>
   </div>
+</div>
 
   <table id="userLedgerTbl" class="data-table">
     <thead>
