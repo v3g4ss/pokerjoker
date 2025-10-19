@@ -5,18 +5,6 @@
     if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
     return res.json();
   };
-  
-// --- API Helper ---
-async function api(url, opt = {}) {
-  const res = await fetch(`/api${url}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    ...opt
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || res.statusText);
-  return data;
-}
 
 // --- KPIs laden ---
 async function loadStats() {
