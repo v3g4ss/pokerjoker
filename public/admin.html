@@ -115,6 +115,22 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+.btn-nav {
+  background: #2a3046;
+  border: 1px solid #444;
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-nav:hover:not(:disabled) {
+  background: #3b4160;
+}
+.btn-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 
 .text-green { color: #37c837; font-weight: 600; }
 .text-red   { color: #e64b4b; font-weight: 600; }
@@ -237,16 +253,34 @@
   </div>
 
   <!-- User-Ledger -->
-   <div class="card">
+<div class="card">
   <h2>User-Ledger</h2>
-  <input id="ledgerUserId" type="number" placeholder="User-ID eingeben" />
-  <button id="btnLoadUserLedger">Laden</button>
+
+  <div class="row" style="gap:8px;margin-bottom:8px;">
+    <input id="ledgerUserId" type="number" placeholder="User-ID eingeben">
+    <button id="ledgerLoadBtn">Laden</button>
+    <button id="ledgerReloadBtn">🔄 Aktualisieren</button>
+  </div>
 
   <table id="userLedgerTbl" class="data-table">
-    <tbody></tbody>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>E-Mail</th>
+        <th>Tokens</th>
+        <th>Grund</th>
+        <th>Balance</th>
+        <th>Zeit</th>
+      </tr>
+    </thead>
+    <tbody id="ledgerTableBody"></tbody>
   </table>
 
-  <div id="ledgerPager" class="pager"></div>
+  <div id="ledgerPager" class="pager">
+    <button class="btn-nav" id="ledgerPrev">←</button>
+    <button class="btn-nav" id="ledgerNext">→</button>
+    <span id="ledgerInfo" class="muted">–</span>
+  </div>
 </div>
 
  <!-- Summary -->

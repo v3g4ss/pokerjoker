@@ -240,98 +240,53 @@ document.getElementById('btnCreateUser')?.addEventListener('click', async ()=>{
 });
 
 // ---- Ledger / Reports -----------------------------------------------------
-(() => {
-  const btnLoad = document.getElementById('btnLoadUserLedger');
-  const inputId = document.getElementById('ledgerUserId');
-  const tbody   = document.querySelector('#userLedgerTbl tbody');
-  const pager   = document.getElementById('ledgerPager');
+let ledgerPage = 1;
+const ledgerLimit = 10;
 
-  let page = 1;
-  const limit = 10;
+async function loadUserLedger(page = 1) {
+  try {
+    const uid = document.getElementById('ledgerUserId')?.value.trim();
+    if (!uid) return alert('Bitte User-ID angeben');
 
-  async function loadLedger() {
-    const userId = parseInt(inputId?.value || '');
-    if (!userId) return alert('Bitte gültige User-ID eingeben!');
+    ledgerPage = page;
 
-    try {
-      const res = await fetch(`/api/admin/ledger/user/${userId}?page=${page}&limit=${limit}`, {
-        credentials: 'include'
-      });
-      const result = await res.json();
+    const res = await fetch(`/api/admin/ledger/user/${uid}?page=${page}&limit=${ledgerLimit}`);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.message || 'Fehler beim Laden');
 
-      // Wenn Backend keine Pagination liefert, tun wir’s manuell
-      const list = Array.isArray(result) ? result : (result.data || []);
-      const total = result.total || list.length;
-      const totalPages = Math.ceil(total / limit);
+    const rows = data.data || [];
+    const total = data.total || 0;
+    const start = (page - 1) * ledgerLimit + 1;
+    const end = Math.min(start + ledgerLimit - 1, total);
 
-      // Slice (Fallback wenn keine echte Pagination)
-      const visible = list.slice((page - 1) * limit, page * limit);
+    const tbody = document.querySelector('#ledgerTableBody');
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.id}</td>
+        <td>${r.email || ''}</td>
+        <td style="color:${r.delta >= 0 ? 'lightgreen' : 'salmon'};">
+          ${r.delta >= 0 ? '+' : ''}${r.delta}
+        </td>
+        <td>${r.reason || ''}</td>
+        <td>${r.balance_after ?? ''}</td>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+      </tr>
+    `).join('') || `<tr><td colspan="6" style="text-align:center;">Keine Einträge</td></tr>`;
 
-      // Tabellenkopf
-      tbody.innerHTML = `
-        <tr>
-          <th>ID</th>
-          <th>E-Mail</th>
-          <th>Tokens gekauft</th>
-          <th>Reason</th>
-          <th>Balance</th>
-          <th>Time</th>
-        </tr>
-      `;
-
-      // Zeilen rendern
-      visible.forEach(r => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${r.id}</td>
-          <td>${r.email || '-'}</td>
-          <td class="${r.delta > 0 ? 'text-green' : 'text-red'}">
-            ${r.delta > 0 ? '+' + r.delta : r.delta}
-          </td>
-          <td>${r.reason || ''}</td>
-          <td>${r.balance_after ?? '-'}</td>
-          <td>${new Date(r.created_at).toLocaleString()}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-
-      // Blätterbuttons
-      pager.innerHTML = '';
-      const left = document.createElement('button');
-      left.textContent = '←';
-      left.disabled = page <= 1;
-      left.addEventListener('click', () => {
-        if (page > 1) {
-          page--;
-          loadLedger();
-        }
-      });
-
-      const right = document.createElement('button');
-      right.textContent = '→';
-      right.disabled = page >= totalPages;
-      right.addEventListener('click', () => {
-        if (page < totalPages) {
-          page++;
-          loadLedger();
-        }
-      });
-
-      const info = document.createElement('span');
-      info.textContent = `Einträge ${(page - 1) * limit + 1}-${Math.min(page * limit, total)} von ${total}`;
-
-      pager.append(left, right, info);
-    } catch (err) {
-      console.error('Ledger Fehler:', err);
-      alert('Fehler beim Laden des Ledgers.');
-    }
+    // Pagination + Buttons
+    const pager = document.getElementById('ledgerPager');
+    pager.innerHTML = `
+      <button class="btn-nav" ${page <= 1 ? 'disabled' : ''} onclick="loadUserLedger(${page - 1})">←</button>
+      <button class="btn-nav" ${end >= total ? 'disabled' : ''} onclick="loadUserLedger(${page + 1})">→</button>
+      <span>Einträge ${total ? `${start}-${end} von ${total}` : '0'}</span>
+    `;
+  } catch (e) {
+    console.error('User-Ledger:', e);
   }
+}
 
-  btnLoad?.addEventListener('click', () => {
-    page = 1;
-    loadLedger();
-  });
-})();
+document.getElementById('ledgerLoadBtn')?.addEventListener('click', () => loadUserLedger(1));
+
 
 // === User-Summary mit Filter und E-Mail ===
 $('#btnLoadSummary')?.addEventListener('click', async ()=> {
