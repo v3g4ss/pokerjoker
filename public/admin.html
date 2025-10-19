@@ -256,12 +256,16 @@
 <div class="card">
   <h2>User-Ledger</h2>
 
-  <div class="row" style="gap:8px; align-items:center; margin-bottom:10px;">
-    <button class="btn-nav" id="ledgerPrev">←</button>
-    <button class="btn-nav" id="ledgerNext">→</button>
-    <input id="ledgerUserId" type="number" placeholder="User-ID eingeben" style="width:80px;">
-    <button id="ledgerLoadBtn">Laden</button>
-    <span id="ledgerInfo" class="muted" style="margin-left:auto;">–</span>
+    <div class="row ledger-header" style="justify-content:space-between; align-items:center; margin-bottom:10px;">
+    <div class="left-controls" style="display:flex; align-items:center; gap:8px;">
+      <button class="btn-nav" id="ledgerPrev">←</button>
+      <button class="btn-nav" id="ledgerNext">→</button>
+      <input id="ledgerUserId" type="number" placeholder="User-ID eingeben" style="width:80px;">
+      <button id="ledgerLoadBtn">Laden</button>
+    </div>
+    <div class="right-info" style="font-size:0.9em; color:#ccc;">
+      <span id="ledgerInfo">Einträge 1–10 von 166</span>
+    </div>
   </div>
 
   <table id="userLedgerTbl" class="data-table">
