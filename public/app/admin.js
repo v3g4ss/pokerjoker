@@ -240,13 +240,38 @@ document.getElementById('btnCreateUser')?.addEventListener('click', async ()=>{
 });
 
 // ---- Ledger / Reports -----------------------------------------------------
-$('#btnLoadUserLedger')?.addEventListener('click', async ()=>{
-  const uid = parseInt($('#ledgerUserId')?.value, 10); if (!Number.isInteger(uid)) return;
-  const rows = await api(`/admin/ledger/user/${uid}`);
-  const tb = $('#userLedgerTbl tbody'); if (!tb) return; tb.innerHTML = '';
-  rows.slice(0,50).forEach(r=>{
+$('#btnLoadUserLedger')?.addEventListener('click', async () => {
+  const uid = parseInt($('#ledgerUserId')?.value, 10);
+  if (!Number.isInteger(uid)) return;
+
+  // hole die Daten mit Pagination
+  const res = await api(`/admin/ledger/user/${uid}?page=1&limit=10`);
+  const data = Array.isArray(res.data) ? res.data : res; // Rückwärtskompatibilität
+
+  const tb = $('#userLedgerTbl tbody');
+  if (!tb) return;
+  tb.innerHTML = `
+    <tr>
+      <th>ID</th>
+      <th>E-Mail</th>
+      <th>Tokens gekauft</th>
+      <th>Reason</th>
+      <th>Balance</th>
+      <th>Time</th>
+    </tr>
+  `;
+
+  // Zeilen befüllen
+  (data || []).forEach(r => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${r.id}</td><td class="mono">${r.delta}</td><td>${r.reason||''}</td><td class="mono">${r.balance_after}</td><td class="muted">${r.created_at}</td>`;
+    tr.innerHTML = `
+      <td>${r.id}</td>
+      <td>${r.email || '-'}</td>
+      <td>${r.delta > 0 ? '+' + r.delta : r.delta}</td>
+      <td>${r.reason || ''}</td>
+      <td>${r.balance_after ?? '-'}</td>
+      <td>${new Date(r.created_at).toLocaleString()}</td>
+    `;
     tb.appendChild(tr);
   });
 });
