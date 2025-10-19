@@ -274,16 +274,22 @@ async function loadUserLedger(page = 1) {
     `).join('') || `<tr><td colspan="6" style="text-align:center;">Keine Einträge</td></tr>`;
 
     // Pagination + Buttons
-    const pager = document.getElementById('ledgerPager');
-    pager.innerHTML = `
-      <button class="btn-nav" ${page <= 1 ? 'disabled' : ''} onclick="loadUserLedger(${page - 1})">←</button>
-      <button class="btn-nav" ${end >= total ? 'disabled' : ''} onclick="loadUserLedger(${page + 1})">→</button>
-      <span>Einträge ${total ? `${start}-${end} von ${total}` : '0'}</span>
-    `;
-  } catch (e) {
-    console.error('User-Ledger:', e);
+   // Update Info und Button-Zustände
+    document.getElementById('ledgerInfo').textContent =
+      `Einträge ${total ? `${start}-${end} von ${total}` : '0'}`;
+
+    const btnPrev = document.getElementById('ledgerPrev');
+    const btnNext = document.getElementById('ledgerNext');
+    btnPrev.disabled = page <= 1;
+    btnNext.disabled = end >= total;
+
+    btnPrev.onclick = () => loadUserLedger(page - 1);
+    btnNext.onclick = () => loadUserLedger(page + 1);
+
+    } catch (e) {
+      console.error('User-Ledger:', e);
+    }
   }
-}
 
 document.getElementById('ledgerLoadBtn')?.addEventListener('click', () => loadUserLedger(1));
 
