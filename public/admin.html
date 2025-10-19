@@ -344,13 +344,33 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
 
 
   <!-- Letzte Ledger -->
-  <section class="card">
-    <h2>Letzte 200 Ledger <button class="right" id="btnLoadLast200">Aktualisieren</button></h2>
-    <table id="lastTbl">
-      <thead><tr><th>ID</th><th>User</th><th>Δ</th><th>Reason</th><th>Balance</th><th>Time</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
+ <section class="card">
+  <h2>Letzte 200 Ledger</h2>
+  <div class="ledger-header">
+    <div class="ledger-controls">
+      <button id="btnLoadLast200">Laden</button>
+      <div class="ledger-nav">
+        <button class="btn-nav" id="lastLedgerPrev">←</button>
+        <button class="btn-nav" id="lastLedgerNext">→</button>
+        <span id="lastLedgerInfo">Einträge 1–10 von 200</span>
+      </div>
+    </div>
+  </div>
+
+  <table id="lastTbl">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>User</th>
+        <th>Tokens</th>
+        <th>Grund</th>
+        <th>Balance</th>
+        <th>Zeit</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
 
 <!-- Prompt & Chat-Mode -->
 <section class="card">

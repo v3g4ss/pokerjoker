@@ -1,489 +1,201 @@
-// public/app/admin.js
-// ============================================================
-// Admin-Frontend für Poker Joker
-// ============================================================
-
-// ---- Hilfs-API ------------------------------------------------------------
-async function api(path, opts = {}) {
-  const res = await fetch('/api' + path, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  });
-  const ct = res.headers.get('content-type') || '';
-  const data = ct.includes('application/json') ? await res.json() : await res.text();
-  if (!res.ok) throw new Error((data && data.message) || ('HTTP ' + res.status));
-  return data;
-}
-const $ = s => document.querySelector(s);
-
-// ---- Logout ---------------------------------------------------------------
-document.getElementById('logoutBtn')?.addEventListener('click', async () => {
-  try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
-  location.href = '/login/';
-});
-
-// ---- KPIs -----------------------------------------------------------------
-async function loadStats() {
-  try {
-    const s = (await api('/admin/stats')).stats; // ✅ FIX HIER!
-
-    const set = (sel, val) => {
-      const n = document.querySelector(sel);
-      if (n) n.textContent = (val ?? 0).toString();
-    };
-
-    set('#statCustomers',          s.customers);
-    set('#statAdmins',             s.admins);
-    set('#statMsgs',               s.messages_total);
-    set('#statMsgsNew',            s.messages_new);
-    set('#statPurchased',          s.purchased);
-    set('#statAdminGranted',       s.admin_granted);
-    set('#statTokensCirculation',  s.tokens_in_circulation);
-  } catch (e) {
-    console.warn('stats:', e.message);
-  }
-}
-loadStats();
-
-// ---- Users Liste ----------------------------------------------------------
-let uPage = 1, uLimit = 10, uQ = '';
-
-async function loadUsers() {
-  const qs = new URLSearchParams({ page: uPage, limit: uLimit });
-  if (uQ) qs.set('q', uQ);
-
-  const d = await api('/admin/users?' + qs.toString());
-  const tb = document.querySelector('#usersTbl tbody');
-  if (!tb) return;
-  tb.innerHTML = '';
-
-  (d.items || []).forEach(u => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${u.id}</td>
-      <td class="mono">${u.email}</td>
-      <td>${u.is_admin ? 'Ja' : 'Nein'}</td>
-      <td>${u.is_locked ? '🔒 gesperrt' : '✔ aktiv'}</td>
-      <td class="mono">${u.tokens ?? 0}</td>
-      <td class="mono">${u.purchased ?? 0}</td>
-      <td>
-        <button class="tplus"  data-id="${u.id}" data-delta="50">+50</button>
-        <button class="tminus" data-id="${u.id}" data-delta="-50">-50</button>
-        <button class="adm"    data-id="${u.id}" data-admin="${u.is_admin ? 0 : 1}">${u.is_admin ? 'Admin −' : 'Admin +'}</button>
-        <button class="lock"   data-id="${u.id}" data-lock="${u.is_locked ? 0 : 1}">${u.is_locked ? 'Entsperren' : 'Sperren'}</button>
-        <button class="del"    data-id="${u.id}" style="color:#e74c3c">Löschen</button>
-      </td>`;
-    tb.appendChild(tr);
-  });
-
-  $('#pageInfo') && ($('#pageInfo').textContent = d.total ? `Seite ${uPage} · ${d.total} User` : '–');
-  $('#prevPage') && ($('#prevPage').disabled = uPage <= 1);
-  $('#nextPage') && ($('#nextPage').disabled = uPage * uLimit >= (d.total || 0));
-}
-
-$('#btnSearch')?.addEventListener('click', () => {
-  uQ = $('#userSearch')?.value?.trim() || '';
-  uPage = 1;
-  loadUsers();
-});
-$('#prevPage')?.addEventListener('click', () => { if (uPage>1){ uPage--; loadUsers(); }});
-$('#nextPage')?.addEventListener('click', () => { uPage++; loadUsers(); });
-
-// Tabellen-Click: +50 / -50 / Admin / Lock / Delete ------------------------
-document.querySelector('#usersTbl tbody')?.addEventListener('click', async (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  const id = Number(b.dataset.id);
-  if (!Number.isInteger(id)) return;
-
-  const reasonInput = document.getElementById('tokenReason');
-  const baseReason  = (reasonInput?.value || '').trim();
-  const statusEl    = document.getElementById('tokenStatus');
-
-  // +/− Tokens (Backend: /admin/tokens/adjust)
-  if (b.classList.contains('tplus') || b.classList.contains('tminus')) {
-    const delta  = parseInt(b.dataset.delta, 10);
-    const reason = baseReason || (delta > 0 ? 'admin quick +50' : 'admin quick -50');
-    try {
-      await api('/admin/tokens/adjust', {
-        method: 'POST',
-        body: JSON.stringify({ userId: id, delta, reason })
-      });
-      statusEl && (statusEl.textContent = `✅ Tokens aktualisiert (${delta>0?'+':''}${delta}) – Grund: ${reason}`);
-      await Promise.all([loadUsers(), loadStats()]);
-    } catch (err) {
-      statusEl && (statusEl.textContent = '❌ ' + (err.message || 'Fehler beim Aktualisieren'));
-    }
-    return;
-  }
-
-  // Admin Flag
-  if (b.classList.contains('adm')) {
-    const is_admin = b.dataset.admin === '1';
-    await api(`/admin/users/${id}/admin`, { method:'POST', body: JSON.stringify({ is_admin }) });
-    await Promise.all([loadUsers(), loadStats()]);
-    return;
-  }
-
-  // Lock/Unlock
-  if (b.classList.contains('lock')) {
-    const locked = b.dataset.lock === '1';
-    await api(`/admin/users/${id}/lock`, { method:'POST', body: JSON.stringify({ locked }) });
-    await loadUsers();
-    return;
-  }
-
-  // Soft Delete
-  if (b.classList.contains('del')) {
-    if (!confirm('User wirklich löschen? (soft delete)')) return;
-    await api(`/admin/users/${id}`, { method:'DELETE' });
-    await loadUsers();
-    return;
-  }
-});
-
-loadUsers();
-
-// ---- Tokens anpassen Kachel (mit Grund + Statusausgabe) -------------------
-async function adjustTokens(deltaSign = 1) {
-  const uidEl = $('#tokenUserId');
-  const deltaEl = $('#tokenDelta');
-  const reasonEl = $('#tokenReason');
-  const st = $('#tokenStatus');
-
-  const uid   = parseInt(uidEl?.value, 10);
-  const delta = parseInt(deltaEl?.value, 10);
-  const reason = String(reasonEl?.value || '').trim();
-
-  if (!Number.isInteger(uid) || !Number.isInteger(delta)) {
-    st && (st.textContent = '⚠ Bitte gültige User-ID und Token-Anzahl angeben.');
-    return;
-  }
-
-  const finalDelta = deltaSign * Math.abs(delta);
-  const body = {
-    userId: uid,
-    delta: finalDelta,
-    reason: reason || (finalDelta > 0 ? `admin adjust +${Math.abs(finalDelta)}` : `admin adjust -${Math.abs(finalDelta)}`)
+// ===================== Poker Joker - Admin Dashboard =====================
+(async function () {
+  const api = async (url, opt = {}) => {
+    const res = await fetch('/api' + url, { credentials: 'include', ...opt });
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    return res.json();
   };
 
-  const btnAdd = $('#btnAddTokens'), btnRem = $('#btnRemoveTokens');
-  btnAdd && (btnAdd.disabled = true);
-  btnRem && (btnRem.disabled = true);
-  st && (st.textContent = '⏳ Übertrage…');
-
-  try {
-    const r = await api('/admin/tokens/adjust', { method:'POST', body: JSON.stringify(body) });
-    st && (st.textContent = `✅ Gespeichert. Neuer Kontostand: ${r.balance}`);
-    if (deltaEl) deltaEl.value = ''; // Grund bleibt stehen
-    await Promise.all([loadUsers(), loadStats()]);
-  } catch (e) {
-    st && (st.textContent = '❌ ' + (e.message || 'Fehler beim Anpassen'));
-  } finally {
-    btnAdd && (btnAdd.disabled = false);
-    btnRem && (btnRem.disabled = false);
+  // ---- KPIs / Stats -----------------------------------------------------
+  async function loadStats() {
+    try {
+      const s = await api('/admin/stats');
+      const set = (sel, val) => {
+        const n = document.querySelector(sel);
+        if (n) n.textContent = (val ?? 0).toString();
+      };
+      set('#statCustomers', s.customers);
+      set('#statAdmins', s.admins);
+      set('#statMsgs', s.messages_total);
+      set('#statMsgsNew', s.messages_new);
+      set('#statPurchased', s.purchased);
+      set('#statAdminGranted', s.admin_granted);
+      set('#statTokensCirculation', s.tokens_in_circulation);
+    } catch (e) {
+      console.warn('stats:', e.message);
+    }
   }
-}
-$('#btnAddTokens')?.addEventListener('click', ()=>adjustTokens(+1));
-$('#btnRemoveTokens')?.addEventListener('click', ()=>adjustTokens(-1));
-$('#btnRefreshUsers')?.addEventListener('click', async ()=>{
-  const b = $('#btnRefreshUsers');
-  if (!b) return;
-  b.disabled = true; b.textContent = 'Aktualisiere…';
-  await Promise.all([loadUsers(), loadStats()]);
-  b.textContent = 'Aktualisieren'; b.disabled = false;
-});
+  loadStats();
 
-// Admin ersetzt sein eigenes Passwort 
-document.getElementById('btnMePass')?.addEventListener('click', async () => {
-  const oldp = document.getElementById('meOldPass').value;
-  const newp = document.getElementById('meNewPass').value;
-  const st = document.getElementById('mePassStatus');
-  if (st) st.textContent = '...';
-
-  try {
-    const r = await api('/auth/password', {
-      method:'POST',
-      body: JSON.stringify({ current_password: oldp, new_password: newp })
-    });
-    if (st) st.textContent = '✅ ' + (r.message || 'Passwort geändert. Bitte neu einloggen.');
-    // kleinen Delay und auf Login-Seite
-    setTimeout(()=>location.href='/login/', 800);
-  } catch (e) {
-    if (st) st.textContent = '❌ ' + (e.message || 'Fehler');
+  // ---- Users ------------------------------------------------------------
+  async function loadUsers() {
+    try {
+      const users = await api('/admin/users');
+      const tbody = document.querySelector('#usersTbl tbody');
+      if (!tbody) return;
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td>${u.id}</td>
+          <td>${u.email}</td>
+          <td>${u.is_admin ? '✅' : ''}</td>
+          <td>${u.tokens}</td>
+          <td>${u.purchased}</td>
+          <td>${u.is_locked ? '🔒' : ''}</td>
+        </tr>
+      `).join('');
+    } catch (e) {
+      console.error('loadUsers:', e);
+    }
   }
-});
+  loadUsers();
 
-// ---- User anlegen (NEU – Punkt 3) ----------------------------------------
-document.getElementById('btnCreateUser')?.addEventListener('click', async ()=>{
-  const email = document.getElementById('newUserEmail')?.value.trim();
-  const pass  = document.getElementById('newUserPass')?.value || '';
-  const adm   = !!document.getElementById('newUserAdmin')?.checked;
-  const st    = document.getElementById('createUserStatus');
-
-  if (!email || pass.length < 6) {
-    st && (st.textContent = '⚠ E-Mail & mind. 6 Zeichen Passwort');
-    return;
+  // ---- Token Summary ----------------------------------------------------
+  async function loadSummary() {
+    try {
+      const rows = await api('/admin/summary');
+      const tbody = document.querySelector('#summaryTbl tbody');
+      if (!tbody) return;
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td>${r.user_id}</td>
+          <td>${r.email}</td>
+          <td>${r.gekauft}</td>
+          <td>${r.ausgegeben}</td>
+          <td>${r.tokens}</td>
+          <td>${new Date(r.last_update).toLocaleString()}</td>
+        </tr>
+      `).join('');
+    } catch (e) {
+      console.error('loadSummary:', e);
+    }
   }
-  st && (st.textContent = '⏳ Anlegen…');
+  loadSummary();
 
-  try {
-    await api('/admin/users', { method:'POST', body: JSON.stringify({ email, password: pass, is_admin: adm }) });
-    st && (st.textContent = '✅ Angelegt');
-    document.getElementById('newUserEmail').value = '';
-    document.getElementById('newUserPass').value  = '';
-    document.getElementById('newUserAdmin').checked = false;
-    await Promise.all([loadUsers(), loadStats()]);
-  } catch (e) {
-    st && (st.textContent = '❌ ' + (e.message || 'Fehler'));
-  }
-});
+  // ---- User Ledger ------------------------------------------------------
+  let ledgerPage = 1;
+  const ledgerLimit = 10;
 
-// ---- Ledger / Reports -----------------------------------------------------
-let ledgerPage = 1;
-const ledgerLimit = 10;
+  async function loadUserLedger(page = 1) {
+    try {
+      const uid = document.getElementById('ledgerUserId')?.value.trim();
+      if (!uid) return alert('Bitte User-ID angeben');
+      ledgerPage = page;
 
-async function loadUserLedger(page = 1) {
-  try {
-    const uid = document.getElementById('ledgerUserId')?.value.trim();
-    if (!uid) return alert('Bitte User-ID angeben');
+      const res = await fetch(`/api/admin/ledger/user/${uid}?page=${page}&limit=${ledgerLimit}`);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.message || 'Fehler beim Laden');
 
-    ledgerPage = page;
+      const rows = data.data || [];
+      const total = data.total || 0;
+      const start = (page - 1) * ledgerLimit + 1;
+      const end = Math.min(start + ledgerLimit - 1, total);
 
-    const res = await fetch(`/api/admin/ledger/user/${uid}?page=${page}&limit=${ledgerLimit}`);
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.message || 'Fehler beim Laden');
+      const tbody = document.querySelector('#ledgerTableBody');
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td>${r.id}</td>
+          <td>${r.email || ''}</td>
+          <td style="color:${r.delta >= 0 ? 'lightgreen' : 'salmon'};">
+            ${r.delta >= 0 ? '+' : ''}${r.delta}
+          </td>
+          <td>${r.reason || ''}</td>
+          <td>${r.balance_after ?? ''}</td>
+          <td>${new Date(r.created_at).toLocaleString()}</td>
+        </tr>
+      `).join('') || `<tr><td colspan="6" style="text-align:center;">Keine Einträge</td></tr>`;
 
-    const rows = data.data || [];
-    const total = data.total || 0;
-    const start = (page - 1) * ledgerLimit + 1;
-    const end = Math.min(start + ledgerLimit - 1, total);
+      document.getElementById('ledgerInfo').textContent =
+        `Einträge ${total ? `${start}-${end} von ${total}` : '0'}`;
 
-    const tbody = document.querySelector('#ledgerTableBody');
-    tbody.innerHTML = rows.map(r => `
-      <tr>
-        <td>${r.id}</td>
-        <td>${r.email || ''}</td>
-        <td style="color:${r.delta >= 0 ? 'lightgreen' : 'salmon'};">
-          ${r.delta >= 0 ? '+' : ''}${r.delta}
-        </td>
-        <td>${r.reason || ''}</td>
-        <td>${r.balance_after ?? ''}</td>
-        <td>${new Date(r.created_at).toLocaleString()}</td>
-      </tr>
-    `).join('') || `<tr><td colspan="6" style="text-align:center;">Keine Einträge</td></tr>`;
+      const btnPrev = document.getElementById('ledgerPrev');
+      const btnNext = document.getElementById('ledgerNext');
+      btnPrev.disabled = page <= 1;
+      btnNext.disabled = end >= total;
 
-    // Pagination + Buttons
-   // Update Info und Button-Zustände
-    document.getElementById('ledgerInfo').textContent =
-      `Einträge ${total ? `${start}-${end} von ${total}` : '0'}`;
-
-    const btnPrev = document.getElementById('ledgerPrev');
-    const btnNext = document.getElementById('ledgerNext');
-    btnPrev.disabled = page <= 1;
-    btnNext.disabled = end >= total;
-
-    btnPrev.onclick = () => loadUserLedger(page - 1);
-    btnNext.onclick = () => loadUserLedger(page + 1);
-
+      btnPrev.onclick = () => loadUserLedger(page - 1);
+      btnNext.onclick = () => loadUserLedger(page + 1);
     } catch (e) {
       console.error('User-Ledger:', e);
     }
   }
 
-document.getElementById('ledgerLoadBtn')?.addEventListener('click', () => loadUserLedger(1));
+  document.getElementById('ledgerLoadBtn')?.addEventListener('click', () => loadUserLedger(1));
 
+  // ---- Letzte 200 Ledger ------------------------------------------------
+  let lastLedgerPage = 1;
+  const lastLedgerLimit = 10;
+  let lastLedgerData = [];
 
-// === User-Summary mit Filter und E-Mail ===
-$('#btnLoadSummary')?.addEventListener('click', async ()=> {
-  const rows = await api('/admin/summary');
-  const tb = $('#summaryTbl tbody');
-  if (!tb) return;
-  tb.innerHTML = '';
-
-  if (!rows || !rows.length) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="6" style="text-align:center; opacity:0.7;">Keine Daten gefunden</td>`;
-    tb.appendChild(tr);
-    return;
+  function fmtDelta(n) {
+    const val = Number(n || 0);
+    const s = val > 0 ? '+' : '';
+    const cls = val >= 0 ? 'text-green' : 'text-red';
+    return `<span class="${cls}">${s}${val}</span>`;
+  }
+  function fmtDate(t) {
+    try { return new Date(t).toLocaleString(); }
+    catch { return ''; }
+  }
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, m =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])
+    );
   }
 
-  rows.forEach(r => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.user_id}</td>
-      <td>${r.email}</td>
-      <td>${r.last_update ? new Date(r.last_update).toLocaleString() : '-'}</td>
-      <td>${r.gekauft ?? 0}</td>
-      <td>${r.ausgegeben ?? 0}</td>
-      <td><b>${r.tokens ?? 0}</b></td>
-    `;
-    tb.appendChild(tr);
-  });
-});
-
-$('#btnLoadLast200')?.addEventListener('click', async ()=>{
-  const rows = await api('/admin/ledger/last200');
-  const tb = $('#lastTbl tbody'); if (!tb) return; tb.innerHTML = '';
-  rows.forEach(r=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${r.id}</td><td class="mono">${r.user_id}</td><td class="mono">${r.delta}</td><td>${r.reason||''}</td><td class="mono">${r.balance_after}</td><td class="muted">${r.created_at}</td>`;
-    tb.appendChild(tr);
-  });
-});
-
-// === User Summary laden ===
-async function loadSummary() {
-  try {
-    const q = document.getElementById('summarySearch')?.value || '';
-    const res = await fetch(`/api/admin/summary?q=${encodeURIComponent(q)}`, {
-      credentials: 'include'
-    });
-    const rows = await res.json();
-    const tb = document.querySelector('#summaryTbl tbody');
-    if (!tb) return;
-    tb.innerHTML = '';
-
-    if (!rows.length) {
-      tb.innerHTML = '<tr><td colspan="6" style="text-align:center;opacity:0.7;">Keine Daten gefunden</td></tr>';
-      return;
+  async function loadLastLedger() {
+    try {
+      const data = await api('/admin/ledger/last200');
+      lastLedgerData = data || [];
+      lastLedgerPage = 1;
+      renderLastLedger();
+    } catch (e) {
+      console.error('loadLastLedger:', e);
     }
-
-    rows.forEach(r => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${r.user_id}</td>
-        <td>${r.email}</td>
-        <td>${r.last_update ? new Date(r.last_update).toLocaleString() : '-'}</td>
-        <td>${r.gekauft ?? 0}</td>
-        <td>${r.ausgegeben ?? 0}</td>
-        <td><b>${r.tokens ?? 0}</b></td>
-      `;
-      tb.appendChild(tr);
-    });
-  } catch (err) {
-    console.error('Fehler beim Laden der Summary:', err);
   }
-}
 
-// === Buttons verbinden ===
-document.getElementById('btnLoadSummary')
-  ?.addEventListener('click', loadSummary);
-document.getElementById('btnSearchSummary')
-  ?.addEventListener('click', loadSummary);
+  function renderLastLedger() {
+    const tbody = document.querySelector('#lastTbl tbody');
+    const info = document.getElementById('lastLedgerInfo');
+    if (!tbody || !info) return;
 
-// ---- Chat-Mode UI (KB_ONLY / KB_PREFERRED / LLM_ONLY) ---------------------
-(async function(){
-  const status = $('#chatModeStatus');
-  const radios = [...document.querySelectorAll('input[name="chatMode"]')];
-  if (!radios.length) return;
-  const setUI = m => (radios.find(r=>r.value===m) || radios[1]).checked = true;
+    const total = lastLedgerData.length;
+    const start = (lastLedgerPage - 1) * lastLedgerLimit;
+    const end = Math.min(start + lastLedgerLimit, total);
+    const pageData = lastLedgerData.slice(start, end);
 
-  try {
-    const d = await api('/admin/bot-mode'); setUI(d.mode || 'KB_PREFERRED');
-    status && (status.textContent = `Aktuell: ${d.mode}`);
-  } catch {}
+    tbody.innerHTML = pageData.map(r => `
+      <tr>
+        <td>${esc(r.id)}</td>
+        <td>${esc(r.user_id)}</td>
+        <td>${fmtDelta(r.delta)}</td>
+        <td>${esc(r.reason || '')}</td>
+        <td>${esc(r.balance_after)}</td>
+        <td>${fmtDate(r.created_at)}</td>
+      </tr>
+    `).join('');
 
-  $('#btnChatModeSave')?.addEventListener('click', async ()=>{
-    const val = (radios.find(r=>r.checked)||{}).value;
-    try {
-      await api('/admin/bot-mode', { method:'PUT', body: JSON.stringify({ mode: val }) });
-      status && (status.textContent = `Gespeichert: ${val}`);
-    } catch(e){
-      status && (status.textContent = e.message || 'Fehler');
+    info.textContent = total
+      ? `Einträge ${start + 1}–${end} von ${total}`
+      : 'Keine Einträge';
+
+    document.getElementById('lastLedgerPrev').disabled = lastLedgerPage <= 1;
+    document.getElementById('lastLedgerNext').disabled = end >= total;
+  }
+
+  document.getElementById('btnLoadLast200')?.addEventListener('click', loadLastLedger);
+  document.getElementById('lastLedgerPrev')?.addEventListener('click', () => {
+    if (lastLedgerPage > 1) {
+      lastLedgerPage--;
+      renderLastLedger();
     }
   });
-})();
-
-// ---- Prompt-Kachel: Laden/Speichern/Testen -------------------------------
-(async function(){
-  const txt = $('#admPrompt'), temp = $('#admTemp'), mdl = $('#admModel');
-  const st  = $('#promptStatus'), btnSave = $('#btnPromptSave'), btnTest = $('#btnPromptTest');
-  if (!txt || !temp || !mdl) return;
-
-  // Laden
-  try {
-    const r = await fetch('/api/admin/prompt', { credentials:'include' });
-    const d = await r.json();
-    if (d && d.system_prompt !== undefined) {
-      if (typeof d.system_prompt === 'string') txt.value = d.system_prompt;
-      if (d.temperature != null) temp.value = d.temperature;
-      if (d.model) mdl.value = d.model;
-      st && (st.textContent = 'Geladen');
-    }
-  } catch {}
-
-  // Speichern (LIVE)
-  btnSave?.addEventListener('click', async ()=>{
-    st && (st.textContent = 'Speichere…');
-    const body = { system_prompt: txt.value, temperature: parseFloat(temp.value||'0.3'), model: mdl.value };
-    try {
-      const r = await fetch('/api/admin/prompt', {
-        method:'PUT', credentials:'include',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(body)
-      });
-      const d = await r.json().catch(()=>({}));
-      st && (st.textContent = d.ok ? 'Gespeichert' : (d.error||'Fehler'));
-    } catch (e) {
-      st && (st.textContent = e.message || 'Fehler');
+  document.getElementById('lastLedgerNext')?.addEventListener('click', () => {
+    if (lastLedgerPage * lastLedgerLimit < lastLedgerData.length) {
+      lastLedgerPage++;
+      renderLastLedger();
     }
   });
 
-  // Testen (zeigt IMMER etwas an – auch bei Server/Model-Fehlern)
-  btnTest?.addEventListener('click', async ()=>{
-    const outEl = document.getElementById('admAnswer');
-    outEl && (outEl.textContent = '⏳ teste…');
-    st && (st.textContent = 'Teste…');
-
-    const body = {
-      system_prompt: txt.value,
-      temperature: parseFloat(temp.value || '0.3'),
-      model: mdl.value,
-      input: 'Erkläre in 1 Satz, was du kannst.'
-    };
-
-    try {
-      const r  = await fetch('/api/admin/prompt/test', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify(body)
-      });
-      const ct = r.headers.get('content-type') || '';
-      const d  = ct.includes('application/json') ? await r.json()
-                                                 : { ok:false, output:'', error: await r.text() };
-
-      const text = (d && (d.output || d.error)) ||
-                   `[CLIENT Fallback]\nPrompt: "${(body.system_prompt||'').replace(/\s+/g,' ').slice(0,120)}${(body.system_prompt||'').length>120?'…':''}"\nAntwort: (Server gab keinen Text zurück)`;
-
-      outEl && (outEl.textContent = text);
-      st && (st.textContent = d?.ok ? 'Test ok' : 'Fehler beim Test');
-      console.debug('prompt/test response:', d);
-    } catch (e) {
-      outEl && (outEl.textContent = `[CLIENT Error] ${e.message || String(e)}`);
-      st && (st.textContent = 'Fehler');
-    }
-  });
-
-  // === Lazy Load: Untermenü-Editor nur bei Bedarf laden ===
-const submenuCard = document.querySelector('#submenuCard');
-
-if (submenuCard) {
-  submenuCard.addEventListener('click', async () => {
-    if (!window.editorLoaded) {
-      console.log('[admin] Lade admin-editor.js …');
-      try {
-        await import('/app/admin-editor.js?v=20250831');
-        window.editorLoaded = true;
-        console.log('[admin] admin-editor.js erfolgreich geladen!');
-      } catch (err) {
-        console.error('[admin] Fehler beim Laden von admin-editor.js:', err);
-      }
-    } else {
-      console.log('[admin] admin-editor.js ist bereits aktiv.');
-    }
-  });
-}
+  loadLastLedger();
 
 })();
