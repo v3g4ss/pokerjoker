@@ -5,49 +5,65 @@
     if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
     return res.json();
   };
+  
+// --- API Helper ---
+async function api(url, opt = {}) {
+  const res = await fetch(`/api${url}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    ...opt
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || res.statusText);
+  return data;
+}
 
-  // ---- KPIs / Stats -----------------------------------------------------
-  async function loadStats() {
-    try {
-      const s = await api('/admin/stats');
-      const set = (sel, val) => {
-        const n = document.querySelector(sel);
-        if (n) n.textContent = (val ?? 0).toString();
-      };
-      set('#statCustomers', s.customers);
-      set('#statAdmins', s.admins);
-      set('#statMsgs', s.messages_total);
-      set('#statMsgsNew', s.messages_new);
-      set('#statPurchased', s.purchased);
-      set('#statAdminGranted', s.admin_granted);
-      set('#statTokensCirculation', s.tokens_in_circulation);
-    } catch (e) {
-      console.warn('stats:', e.message);
-    }
-  }
-  loadStats();
+// --- KPIs laden ---
+async function loadStats() {
+  try {
+    const { stats } = await api('/admin/stats');
+    const set = (sel, val) => {
+      const el = document.querySelector(sel);
+      if (el) el.textContent = val ?? 0;
+    };
 
-  // ---- Users ------------------------------------------------------------
-  async function loadUsers() {
-    try {
-      const users = await api('/admin/users');
-      const tbody = document.querySelector('#usersTbl tbody');
-      if (!tbody) return;
-      tbody.innerHTML = users.map(u => `
-        <tr>
-          <td>${u.id}</td>
-          <td>${u.email}</td>
-          <td>${u.is_admin ? '✅' : ''}</td>
-          <td>${u.tokens}</td>
-          <td>${u.purchased}</td>
-          <td>${u.is_locked ? '🔒' : ''}</td>
-        </tr>
-      `).join('');
-    } catch (e) {
-      console.error('loadUsers:', e);
-    }
+    set('#statCustomers', stats.customers);
+    set('#statAdmins', stats.admins);
+    set('#statMsgs', stats.messages_total);
+    set('#statMsgsNew', stats.messages_new);
+    set('#statPurchased', stats.purchased);
+    set('#statAdminGranted', stats.admin_granted);
+    set('#statTokensCirculation', stats.tokens_in_circulation);
+  } catch (e) {
+    console.error('Fehler bei loadStats:', e);
   }
-  loadUsers();
+}
+
+// --- Users laden ---
+async function loadUsers(page = 1, limit = 10) {
+  try {
+    const data = await api(`/admin/users?page=${page}&limit=${limit}`);
+    const users = data.users || data || [];
+
+    const tbody = document.querySelector('#usersTableBody');
+    tbody.innerHTML = users.map(u => `
+      <tr>
+        <td>${u.id}</td>
+        <td>${u.name || '-'}</td>
+        <td>${u.email || '-'}</td>
+        <td>${u.tokens || 0}</td>
+        <td>${u.role || '-'}</td>
+        <td>${u.created_at ? new Date(u.created_at).toLocaleString() : ''}</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    console.error('Fehler bei loadUsers:', err);
+  }
+}
+
+// --- Aufrufen ---
+loadStats();
+loadUsers();
 
   // ---- Token Summary ----------------------------------------------------
   async function loadSummary() {
