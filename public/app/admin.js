@@ -31,9 +31,13 @@ async function loadStats() {
 async function loadUsers(page = 1, limit = 10) {
   try {
     const data = await api(`/admin/users?page=${page}&limit=${limit}`);
-    const users = data.users || data || [];
+
+    // 🔧 Sicherheit: egal ob API Objekt oder Array liefert
+    const users = Array.isArray(data) ? data : (data.users || []);
 
     const tbody = document.querySelector('#usersTableBody');
+    if (!tbody) return;
+
     tbody.innerHTML = users.map(u => `
       <tr>
         <td>${u.id}</td>
@@ -44,6 +48,7 @@ async function loadUsers(page = 1, limit = 10) {
         <td>${u.created_at ? new Date(u.created_at).toLocaleString() : ''}</td>
       </tr>
     `).join('');
+
   } catch (err) {
     console.error('Fehler bei loadUsers:', err);
   }
