@@ -7,101 +7,103 @@
   <style>
     :root { color-scheme: dark; }
 
-    body {
-      margin: 18px;
-      font-family: system-ui, Segoe UI, Arial;
-      background: #0f1115;
-      color: #eaeaea;
-    }
+ body {
+  margin: 18px;
+  font-family: system-ui, Segoe UI, Arial;
+  background: #0f1115;
+  color: #eaeaea;
+}
 
-    h1 { margin: 0 0 12px }
-    .grid { display: grid; gap: 14px }
-    @media(min-width:900px) { .grid { grid-template-columns: 1fr 1fr } }
+h1 { margin: 0 0 12px }
+.grid { display: grid; gap: 14px }
+@media(min-width:900px) { .grid { grid-template-columns: 1fr 1fr } }
 
-    .card {
-      background: #151821;
-      border: 1px solid #232839;
-      border-radius: 12px;
-      padding: 14px;
-    }
+.card {
+  background: #151821;
+  border: 1px solid #232839;
+  border-radius: 12px;
+  padding: 14px;
+}
 
-    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
-    input, button, select, textarea {
-      padding: 8px 10px;
-      border-radius: 8px;
-      border: 1px solid #ad9844;
-      background: #141e3f;
-      color: #eaeaea;
-    }
+input, button, select, textarea {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #ad9844;
+  background: #141e3f;
+  color: #eaeaea;
+}
 
-    button { cursor: pointer; }
-    button:disabled { opacity: 0.6; cursor: wait; }
+button { cursor: pointer; }
+button:disabled { opacity: 0.6; cursor: wait; }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-      font-size: .95rem;
-    }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: .95rem;
+}
 
-    th, td {
-      border-bottom: 1px solid #232839;
-      padding: 8px;
-      text-align: left;
-      vertical-align: top;
-    }
+th, td {
+  border-bottom: 1px solid #232839;
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+}
 
-    th { font-weight: 600; color: #b9c2ff; }
+th { font-weight: 600; color: #b9c2ff; }
 
-    .muted { opacity: 0.7 }
-    .right { float: right }
-    .mono { font-family: ui-monospace, Menlo, Consolas, monospace }
-    .span-2 { grid-column: 1 / -1 }
+.muted { opacity: 0.7 }
+.right { float: right }
+.mono { font-family: ui-monospace, Menlo, Consolas, monospace }
+.span-2 { grid-column: 1 / -1 }
 
-    #logoutBtn {
-      position: fixed;
-      top: 12px;
-      right: 16px;
-      padding: 8px 12px;
-      border-radius: 10px;
-      border: 1px solid #e6e8ef;
-      background: #1f2333;
-      color: #eaeaea;
-    }
-    #logoutBtn:hover { background: #2a3046; }
+#logoutBtn {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #e6e8ef;
+  background: #1f2333;
+  color: #eaeaea;
+}
+#logoutBtn:hover { background: #2a3046; }
 
-    /* Icon-Button Farben */
-    button[title="Bearbeiten"] { color: #f1c40f; }
-    button[title="Speichern"]  { color: #2ecc71; }
-    button[title="Löschen"]    { color: #e74c3c; }
-    button[title] { background: transparent; border: none; font-size: 1.2rem; }
+/* Icon-Button Farben */
+button[title="Bearbeiten"] { color: #f1c40f; }
+button[title="Speichern"]  { color: #2ecc71; }
+button[title="Löschen"]    { color: #e74c3c; }
+button[title] { background: transparent; border: none; font-size: 1.2rem; }
 
-    /* KPI-Grid */
-    .kpi-grid{
-      display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 10px;
-      margin: 12px 0 16px;
-    }
-    .kpi-grid > div{
-      padding: 8px 10px;
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: 10px;
-      background: rgba(0,0,0,.2);
-    }
-    .data-table th, .data-table td {
+/* KPI-Grid */
+.kpi-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+.kpi-grid > div{
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  background: rgba(0,0,0,.2);
+}
+
+/* Tabellen */
+.data-table th, .data-table td {
   padding: 6px 10px;
   text-align: left;
 }
 
+/* Pager */
 .pager {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 8px;
 }
-
 .pager button {
   background: var(--color-accent);
   color: white;
@@ -110,11 +112,12 @@
   padding: 4px 10px;
   cursor: pointer;
 }
-
 .pager button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Navigation Buttons (← →) */
 .btn-nav {
   background: transparent;
   border: 1px solid #555;
@@ -130,6 +133,32 @@
 .btn-nav:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* Ledger Layout */
+.ledger-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.ledger-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ledger-controls input {
+  width: 80px;
+  background: #141e3f;
+  border: 1px solid #ad9844;
+  border-radius: 8px;
+  padding: 4px 6px;
+  color: #eaeaea;
+  text-align: center;
+}
+.ledger-info {
+  font-size: 0.9em;
+  color: #ccc;
 }
 
 .text-green { color: #37c837; font-weight: 600; }
@@ -256,14 +285,14 @@
 <div class="card">
   <h2>User-Ledger</h2>
 
-    <div class="row ledger-header" style="justify-content:space-between; align-items:center; margin-bottom:10px;">
-    <div class="left-controls" style="display:flex; align-items:center; gap:8px;">
+  <div class="ledger-header">
+    <div class="ledger-controls">
       <button class="btn-nav" id="ledgerPrev">←</button>
       <button class="btn-nav" id="ledgerNext">→</button>
-      <input id="ledgerUserId" type="number" placeholder="User-ID eingeben" style="width:80px;">
+      <input id="ledgerUserId" type="number" placeholder="User-ID eingeben">
       <button id="ledgerLoadBtn">Laden</button>
     </div>
-    <div class="right-info" style="font-size:0.9em; color:#ccc;">
+    <div class="ledger-info">
       <span id="ledgerInfo">Einträge 1–10 von 166</span>
     </div>
   </div>
