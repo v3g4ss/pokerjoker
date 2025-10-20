@@ -250,40 +250,26 @@ function renderPager(infoId, page, limit, total) {
   el.textContent = `Einträge ${start}–${end} von ${total}`;
 }
 
-// === User-Ledger (User-ID gezielt laden) ===
+// === User Ledger (mit Pagination) ===
 let userLedgerPage = 1;
-const ledgerLimit = 10;
+const userLedgerLimit = 10;
 let userLedgerTotal = 0;
 
-// Button-Listener
-document.getElementById('btnLoadUserLedger')?.addEventListener('click', () => {
-  const uid = parseInt(document.getElementById('ledgerUserId')?.value, 10);
-  if (!uid || uid <= 0) {
-    alert('Bitte gültige User-ID eingeben!');
-    return;
-  }
-  userLedgerPage = 1;
-  loadUserLedger(uid, userLedgerPage);
-});
-
-document.getElementById('ledgerPrev')?.addEventListener('click', () => {
-  const uid = parseInt(document.getElementById('ledgerUserId')?.value, 10);
-  if (userLedgerPage > 1) loadUserLedger(uid, --userLedgerPage);
-});
-
-document.getElementById('ledgerNext')?.addEventListener('click', () => {
-  const uid = parseInt(document.getElementById('ledgerUserId')?.value, 10);
-  if (userLedgerPage * ledgerLimit < userLedgerTotal) loadUserLedger(uid, ++userLedgerPage);
-});
-
-async function loadUserLedger(uid, page = 1) {
+async function loadUserLedger(page = 1) {
   try {
-    const data = await api(`/admin/ledger/user/${uid}?page=${page}&limit=${ledgerLimit}`);
-    const rows = data.items || data || [];
-    userLedgerTotal = data.total || rows.length;
+    const uid = document.getElementById('ledgerUserId')?.value?.trim();
+    if (!uid) {
+      console.warn('Keine User-ID angegeben.');
+      return;
+    }
 
-    const tbody = document.querySelector('#userLedgerTbl tbody');
+    const data = await api(`/admin/user-ledger?user_id=${uid}&page=${page}&limit=${userLedgerLimit}`);
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    userLedgerTotal = data.total || rows.length || 0;
+
+    const tbody = document.querySelector('#ledgerTableBodyUser');
     if (!tbody) return;
+
     tbody.innerHTML = rows.map(r => `
       <tr>
         <td>${r.id}</td>
@@ -292,19 +278,44 @@ async function loadUserLedger(uid, page = 1) {
         <td>${r.reason || ''}</td>
         <td>${r.balance_after ?? ''}</td>
         <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
-      </tr>`).join('');
+      </tr>
+    `).join('');
 
-    // Pagination-Anzeige
-    const info = document.getElementById('userLedgerInfo');
+    const info = document.getElementById('ledgerInfo');
     if (info) {
-      const start = (page - 1) * ledgerLimit + 1;
-      const end = Math.min(page * ledgerLimit, userLedgerTotal);
+      const start = (page - 1) * userLedgerLimit + 1;
+      const end = Math.min(page * userLedgerLimit, userLedgerTotal);
       info.textContent = `Einträge ${start}-${end} von ${userLedgerTotal}`;
     }
+
+    // Buttons aktivieren/deaktivieren
+    document.getElementById('ledgerPrev').disabled = page <= 1;
+    document.getElementById('ledgerNext').disabled = page * userLedgerLimit >= userLedgerTotal;
+
   } catch (e) {
     console.error('Fehler bei loadUserLedger:', e);
   }
 }
+
+// Button-Events
+document.getElementById('ledgerPrev')?.addEventListener('click', () => {
+  if (userLedgerPage > 1) {
+    userLedgerPage--;
+    loadUserLedger(userLedgerPage);
+  }
+});
+
+document.getElementById('ledgerNext')?.addEventListener('click', () => {
+  if (userLedgerPage * userLedgerLimit < userLedgerTotal) {
+    userLedgerPage++;
+    loadUserLedger(userLedgerPage);
+  }
+});
+
+document.getElementById('ledgerLoadBtn')?.addEventListener('click', () => {
+  userLedgerPage = 1;
+  loadUserLedger(userLedgerPage);
+});
 
 // === Letzte 200 Ledger (ebenfalls paginiert, gleiche Logik) ===
 let lastLedgerPage = 1;
