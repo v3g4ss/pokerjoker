@@ -56,7 +56,8 @@
   // === Letzte 200 Ledger ===
   async function loadLedger200() {
     try {
-      const data = await api('/admin/ledger200'); // <-- dein alter funktionierender Pfad
+      // const data = await api('/admin/ledger200'); // <-- dein alter funktionierender Pfad
+      const data = await api('/admin/ledger?limit=200');
       const rows = Array.isArray(data) ? data : (data.ledger || []);
       const tbody = document.querySelector('#ledgerTableBody');
       if (!tbody) return;
@@ -81,7 +82,8 @@
 
   async function loadUserLedger(page = 1) {
     try {
-      const data = await api(`/admin/user-ledger?page=${page}&limit=${ledgerLimit}`); // alter Pfad!
+      // const data = await api(`/admin/user-ledger?page=${page}&limit=${ledgerLimit}`); // alter Pfad!
+      const data = await api(`/admin/ledger-detailed?page=${page}&limit=${ledgerLimit}`);
       const rows = Array.isArray(data.rows) ? data.rows : [];
       ledgerTotal = data.total || 0;
       const tbody = document.querySelector('#ledgerTableBodyUser');
@@ -112,21 +114,28 @@
   }
 
   // === Prompt Playground ===
-  async function loadPromptSettings() {
-    try {
-      const data = await api('/admin/prompt');
-      document.querySelector('#promptText').value = data.prompt || '';
-      document.querySelector('#punctRate').value = data.punct_rate || 1;
-      document.querySelector('#maxUsedTokens').value = data.max_usedtokens_per_msg || 500;
-    } catch (e) {
-      console.error('Fehler bei loadPromptSettings:', e);
-    }
+async function loadPromptSettings() {
+  try {
+    const data = await api('/admin/prompt');
+
+    const elPrompt = document.querySelector('#promptText');
+    const elRate = document.querySelector('#punctRate');
+    const elMax = document.querySelector('#maxUsedTokens');
+
+    if (elPrompt) elPrompt.value = data.prompt || '';
+    if (elRate) elRate.value = data.punct_rate || 1;
+    if (elMax) elMax.value = data.max_usedtokens_per_msg || 500;
+
+  } catch (e) {
+    console.error('Fehler bei loadPromptSettings:', e);
   }
+}
 
   // === Untermenüs ===
   async function loadMenuItems() {
     try {
-      const data = await api('/admin-menu/items'); // wieder alter Pfad
+      // const data = await api('/admin-menu/items'); // wieder alter Pfad
+      const data = await api('/admin/menu-items');
       const items = Array.isArray(data) ? data : (data.items || []);
       const tbody = document.querySelector('#menuItemsTableBody');
       if (!tbody) return;
