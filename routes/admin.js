@@ -381,33 +381,29 @@ router.get('/users/:id/balance', async (req, res) => {
 });
 
 // GET /api/admin/ledger/user/:id
-router.get('/ledger/user/:id', async (req, res) => {
+router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
   try {
-    const userId = parseInt(req.params.id);
-    if (!Number.isInteger(userId))
-      return res.status(400).json({ ok: false, message: 'Ungültige ID' });
-
-    // GET /api/admin/ledger/user/:id
     const { rows } = await pool.query(`
-      SELECT 
-        id,
-        user_id,
-        delta,
-        reason,
-        balance AS balance_after,
-        created_at
-      FROM public.v_token_ledger_detailed
-      WHERE user_id = $1
-      ORDER BY id DESC
-      LIMIT 200
-    `, [userId]);
-
-    res.json(rows || []);
-  } catch (e) {
-    console.error('GET /api/admin/ledger/user/:id', e);
-    res.status(500).json({ ok: false, message: 'Fehler beim Laden des Ledgers' });
+      SELECT l.id,
+             l.user_id,
+             u.email,
+             l.delta,
+             l.reason,
+             l.balance_after,
+             l.created_at
+      FROM token_ledger l
+      LEFT JOIN users u ON u.id = l.user_id
+      WHERE l.user_id = $1
+      ORDER BY l.id DESC
+    `, [id]);
+    res.json(rows);
+  } catch (err) {
+    console.error('Fehler bei /ledger/user/:id', err);
+    res.status(500).json({ error: 'DB error' });
   }
 });
+
 
 // GET /api/admin/ledger/last200
 router.get('/ledger/last200', async (_req, res) => {
