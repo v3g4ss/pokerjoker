@@ -310,6 +310,7 @@ document.getElementById('ledgerNext')?.addEventListener('click', () => {
 // === Letzte 200 Ledger (ebenfalls paginiert, gleiche Logik) ===
 let lastPage = 1;
 let lastTotal = 0;
+const PAGE_SIZE = 10; // sicherstellen, dass das hier oben definiert ist!
 
 async function loadLastLedger(page = 1) {
   try {
@@ -319,6 +320,7 @@ async function loadLastLedger(page = 1) {
 
     const tb = document.querySelector('#lastTbl tbody');
     if (!tb) return;
+
     tb.innerHTML = rows.map(r => `
       <tr>
         <td>${r.id}</td>
@@ -327,25 +329,32 @@ async function loadLastLedger(page = 1) {
         <td>${r.reason || ''}</td>
         <td>${r.balance_after ?? ''}</td>
         <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
-      </tr>`).join('');
+      </tr>
+    `).join('');
 
-    // Pager
+    // Pagination info
     const start = (page - 1) * PAGE_SIZE + 1;
     const end = Math.min(page * PAGE_SIZE, lastTotal);
     const info = document.getElementById('lastLedgerInfo');
     if (info) info.textContent = `Einträge ${start}–${end} von ${lastTotal}`;
 
-    document.getElementById('lastPrev').disabled = page <= 1;
-    document.getElementById('lastNext').disabled = page * PAGE_SIZE >= lastTotal;
+    // Sicheres Button-Handling
+    const prevBtn = document.getElementById('lastLedgerPrev');
+    const nextBtn = document.getElementById('lastLedgerNext');
+    if (prevBtn && nextBtn) {
+      prevBtn.disabled = page <= 1;
+      nextBtn.disabled = page * PAGE_SIZE >= lastTotal;
+    }
   } catch (e) {
     console.error('Fehler bei loadLastLedger:', e);
   }
 }
 
-document.getElementById('lastPrev')?.addEventListener('click', () => {
+// Navigation Buttons
+document.getElementById('lastLedgerPrev')?.addEventListener('click', () => {
   if (lastPage > 1) loadLastLedger(--lastPage);
 });
-document.getElementById('lastNext')?.addEventListener('click', () => {
+document.getElementById('lastLedgerNext')?.addEventListener('click', () => {
   if (lastPage * PAGE_SIZE < lastTotal) loadLastLedger(++lastPage);
 });
 
