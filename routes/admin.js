@@ -440,9 +440,10 @@ router.get('/ledger', async (req, res) => {
     const off   = (page - 1) * limit;
 
     const { rows } = await pool.query(`
-      SELECT id, user_id, delta, reason, balance AS balance_after, created_at
-      FROM public.v_token_ledger_detailed
-      ORDER BY id DESC
+      SELECT l.id, l.user_id, u.email, l.delta, l.reason, l.balance AS balance_after, l.created_at
+      FROM v_token_ledger_detailed l
+      LEFT JOIN users u ON u.id = l.user_id
+      ORDER BY l.id DESC
       LIMIT $1 OFFSET $2
     `, [limit, off]);
 
