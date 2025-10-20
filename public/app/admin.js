@@ -240,6 +240,8 @@ document.getElementById('btnCreateUser')?.addEventListener('click', async ()=>{
 });
 
 // ====================== Ledger & Summary Kacheln ======================
+// === Globale Einstellung für alle Ledger-Paginationen ===
+const PAGE_SIZE = 10;
 
 // Helper für Pagination-Anzeige
 function renderPager(infoId, page, limit, total) {
@@ -326,9 +328,6 @@ async function loadLastLedger(page = 1) {
         <td>${r.balance_after ?? ''}</td>
         <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
       </tr>`).join('');
-
-      // === Globale Einstellung für alle Ledger-Paginationen ===
-      const PAGE_SIZE = 10;
 
     // Pager
     const start = (page - 1) * PAGE_SIZE + 1;
