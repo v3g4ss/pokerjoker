@@ -351,12 +351,24 @@ async function loadLastLedger(page = 1) {
 }
 
 // Navigation Buttons
-document.getElementById('lastLedgerPrev')?.addEventListener('click', () => {
-  if (lastPage > 1) loadLastLedger(--lastPage);
+document.addEventListener('DOMContentLoaded', () => {
+  const prevBtn = document.getElementById('lastLedgerPrev');
+  const nextBtn = document.getElementById('lastLedgerNext');
+
+  if (prevBtn && nextBtn) {
+    prevBtn.addEventListener('click', () => {
+      if (lastPage > 1) loadLastLedger(--lastPage);
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (lastPage * PAGE_SIZE < lastTotal) loadLastLedger(++lastPage);
+    });
+  }
+
+  // Initialer Load
+  loadLastLedger();
 });
-document.getElementById('lastLedgerNext')?.addEventListener('click', () => {
-  if (lastPage * PAGE_SIZE < lastTotal) loadLastLedger(++lastPage);
-});
+
 
 // === User-Summary modernisiert + Pagination ===
 let summaryPage = 1;
