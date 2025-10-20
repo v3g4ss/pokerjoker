@@ -287,23 +287,17 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
   </div>
 
 <!-- User-Ledger -->
-<div class="card">
+<section class="card">
   <h2>User-Ledger</h2>
-
-  <div class="ledger-header">
-  <div class="ledger-controls">
-    <input id="ledgerUserId" type="number" placeholder="User-ID eingeben">
-    <button id="ledgerLoadBtn">Laden</button>
-
-    <div class="ledger-nav">
-      <button class="btn-nav" id="ledgerPrev">←</button>
-      <button class="btn-nav" id="ledgerNext">→</button>
-      <span id="ledgerInfo">Einträge 1–10 von 166</span>
-    </div>
+  <div class="controls">
+    <input id="ledgerUserId" type="number" placeholder="User-ID eingeben" />
+    <button id="btnLoadUserLedger">Laden</button>
+    <button id="ledgerPrev">←</button>
+    <button id="ledgerNext">→</button>
+    <span id="userLedgerInfo">Einträge 0–0 von 0</span>
   </div>
-</div>
 
-  <table id="userLedgerTbl" class="data-table">
+  <table id="userLedgerTbl" class="styled">
     <thead>
       <tr>
         <th>ID</th>
@@ -314,11 +308,12 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
         <th>Zeit</th>
       </tr>
     </thead>
-    <tbody id="ledgerTableBody"></tbody>
+    <tbody></tbody>
   </table>
-</div>
+</section>
 
- <section class="card">
+ <!-- Summary -->
+<section class="card">
   <h2>User-Summary</h2>
   <div class="controls">
     <input id="summarySearch" type="text" placeholder="E-Mail suchen…" />
@@ -326,20 +321,12 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
     <div class="pager">
       <button id="summaryPrev">←</button>
       <button id="summaryNext">→</button>
-      <span id="summaryInfo">Einträge 1–10 von 0</span>
+      <span id="summaryInfo">Einträge 1-10 von 0</span>
     </div>
   </div>
-
   <table id="userSummaryTbl" class="styled">
     <thead>
-      <tr>
-        <th>User</th>
-        <th>E-Mail</th>
-        <th>Time</th>
-        <th>Gekauft</th>
-        <th>Ausgegeben</th>
-        <th>Tokens</th>
-      </tr>
+      <tr><th>User</th><th>E-Mail</th><th>Time</th><th>Gekauft</th><th>Ausgegeben</th><th>Tokens</th></tr>
     </thead>
     <tbody></tbody>
   </table>

@@ -250,16 +250,37 @@ function renderPager(infoId, page, limit, total) {
   el.textContent = `Einträge ${start}–${end} von ${total}`;
 }
 
-// === User-Ledger (mit Blättern) ===
+// === User-Ledger (User-ID gezielt laden) ===
 let userLedgerPage = 1;
 const ledgerLimit = 10;
 let userLedgerTotal = 0;
 
-async function loadUserLedger(page = 1) {
+// Button-Listener
+document.getElementById('btnLoadUserLedger')?.addEventListener('click', () => {
+  const uid = parseInt(document.getElementById('ledgerUserId')?.value, 10);
+  if (!uid || uid <= 0) {
+    alert('Bitte gültige User-ID eingeben!');
+    return;
+  }
+  userLedgerPage = 1;
+  loadUserLedger(uid, userLedgerPage);
+});
+
+document.getElementById('ledgerPrev')?.addEventListener('click', () => {
+  const uid = parseInt(document.getElementById('ledgerUserId')?.value, 10);
+  if (userLedgerPage > 1) loadUserLedger(uid, --userLedgerPage);
+});
+
+document.getElementById('ledgerNext')?.addEventListener('click', () => {
+  const uid = parseInt(document.getElementById('ledgerUserId')?.value, 10);
+  if (userLedgerPage * ledgerLimit < userLedgerTotal) loadUserLedger(uid, ++userLedgerPage);
+});
+
+async function loadUserLedger(uid, page = 1) {
   try {
-    const data = await api(`/admin/ledger?page=${page}&limit=${ledgerLimit}`);
-    const rows = data.items || [];
-    userLedgerTotal = data.total || 0;
+    const data = await api(`/admin/ledger/user/${uid}?page=${page}&limit=${ledgerLimit}`);
+    const rows = data.items || data || [];
+    userLedgerTotal = data.total || rows.length;
 
     const tbody = document.querySelector('#userLedgerTbl tbody');
     if (!tbody) return;
@@ -270,23 +291,20 @@ async function loadUserLedger(page = 1) {
         <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
         <td>${r.reason || ''}</td>
         <td>${r.balance_after ?? ''}</td>
-        <td>${new Date(r.created_at).toLocaleString()}</td>
+        <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
       </tr>`).join('');
 
-    renderPager('userLedgerInfo', page, ledgerLimit, userLedgerTotal);
-    document.getElementById('ledgerPrev').disabled = page <= 1;
-    document.getElementById('ledgerNext').disabled = page * ledgerLimit >= userLedgerTotal;
+    // Pagination-Anzeige
+    const info = document.getElementById('userLedgerInfo');
+    if (info) {
+      const start = (page - 1) * ledgerLimit + 1;
+      const end = Math.min(page * ledgerLimit, userLedgerTotal);
+      info.textContent = `Einträge ${start}-${end} von ${userLedgerTotal}`;
+    }
   } catch (e) {
     console.error('Fehler bei loadUserLedger:', e);
   }
 }
-
-document.getElementById('ledgerPrev')?.addEventListener('click', () => {
-  if (userLedgerPage > 1) loadUserLedger(--userLedgerPage);
-});
-document.getElementById('ledgerNext')?.addEventListener('click', () => {
-  if (userLedgerPage * ledgerLimit < userLedgerTotal) loadUserLedger(++userLedgerPage);
-});
 
 // === Letzte 200 Ledger (ebenfalls paginiert, gleiche Logik) ===
 let lastLedgerPage = 1;
@@ -343,7 +361,7 @@ async function loadUserSummary(page = 1, search = '') {
       <tr>
         <td>${r.id}</td>
         <td>${r.email || ''}</td>
-        <td>${new Date(r.last_activity).toLocaleString()}</td>
+        <td>${r.last_activity ? new Date(r.last_activity).toLocaleString() : '-'}</td>
         <td>${r.total_bought ?? 0}</td>
         <td>${r.total_spent ?? 0}</td>
         <td class="text-yellow">${r.tokens ?? 0}</td>
