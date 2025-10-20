@@ -239,106 +239,138 @@ document.getElementById('btnCreateUser')?.addEventListener('click', async ()=>{
   }
 });
 
-// ---- Ledger / Reports -----------------------------------------------------
-$('#btnLoadUserLedger')?.addEventListener('click', async ()=> {
-  const uid = parseInt($('#ledgerUserId')?.value, 10);
-  if (!Number.isInteger(uid)) return;
-  const rows = await api(`/admin/ledger/user/${uid}`);
-  const tb = $('#userLedgerTbl tbody');
-  if (!tb) return;
-  tb.innerHTML = '';
-  rows.slice(0,50).forEach(r=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.id}</td>
-      <td class="mono">${r.user_id}</td>
-      <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
-      <td>${r.reason || ''}</td>
-      <td class="mono">${r.balance_after}</td>
-      <td class="muted">${new Date(r.created_at).toLocaleString()}</td>`;
-    tb.appendChild(tr);
-  });
-});
+// ====================== Ledger & Summary Kacheln ======================
 
-// === User-Summary mit Filter und E-Mail ===
-$('#btnLoadSummary')?.addEventListener('click', async ()=> {
-  const rows = await api('/admin/summary');
-  const tb = $('#summaryTbl tbody');
-  if (!tb) return;
-  tb.innerHTML = '';
+// Helper für Pagination-Anzeige
+function renderPager(infoId, page, limit, total) {
+  const el = document.getElementById(infoId);
+  if (!el) return;
+  const start = (page - 1) * limit + 1;
+  const end = Math.min(page * limit, total);
+  el.textContent = `Einträge ${start}–${end} von ${total}`;
+}
 
-  if (!rows || !rows.length) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="6" style="text-align:center; opacity:0.7;">Keine Daten gefunden</td>`;
-    tb.appendChild(tr);
-    return;
-  }
+// === User-Ledger (mit Blättern) ===
+let userLedgerPage = 1;
+const ledgerLimit = 10;
+let userLedgerTotal = 0;
 
-  rows.forEach(r => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.user_id}</td>
-      <td>${r.email}</td>
-      <td>${r.last_update ? new Date(r.last_update).toLocaleString() : '-'}</td>
-      <td>${r.gekauft ?? 0}</td>
-      <td>${r.ausgegeben ?? 0}</td>
-      <td><b>${r.aktuell ?? 0}</b></td>
-    `;
-    tb.appendChild(tr);
-  });
-});
-
-$('#btnLoadLast200')?.addEventListener('click', async ()=> {
-  const rows = await api('/admin/ledger/last200');
-  const tb = $('#lastTbl tbody');
-  if (!tb) return;
-  tb.innerHTML = '';
-  rows.forEach(r=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.id}</td>
-      <td class="mono">${r.user_id}</td>
-      <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
-      <td>${r.reason || ''}</td>
-      <td class="mono">${r.balance_after}</td>
-      <td class="muted">${new Date(r.created_at).toLocaleString()}</td>`;
-    tb.appendChild(tr);
-  });
-});
-
-// === User Summary laden ===
-async function loadSummary() {
+async function loadUserLedger(page = 1) {
   try {
-    const q = document.getElementById('summarySearch')?.value || '';
-    const res = await fetch(`/api/admin/summary?q=${encodeURIComponent(q)}`, {
-      credentials: 'include'
-    });
-    const rows = await res.json();
-    const tb = document.querySelector('#summaryTbl tbody');
-    if (!tb) return;
-    tb.innerHTML = '';
+    const data = await api(`/admin/ledger-det?page=${page}&limit=${ledgerLimit}`);
+    const rows = data.items || [];
+    userLedgerTotal = data.total || 0;
 
-    if (!rows.length) {
-      tb.innerHTML = '<tr><td colspan="6" style="text-align:center;opacity:0.7;">Keine Daten gefunden</td></tr>';
-      return;
-    }
+    const tbody = document.querySelector('#userLedgerTbl tbody');
+    if (!tbody) return;
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.id}</td>
+        <td>${r.email || ''}</td>
+        <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
+        <td>${r.reason || ''}</td>
+        <td>${r.balance_after ?? ''}</td>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+      </tr>`).join('');
 
-    rows.forEach(r => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${r.user_id}</td>
-        <td>${r.email}</td>
-        <td>${r.last_update ? new Date(r.last_update).toLocaleString() : '-'}</td>
-        <td>${r.gekauft ?? 0}</td>
-        <td>${r.ausgegeben ?? 0}</td>
-        <td><b>${r.aktuell ?? 0}</b></td>
-      `;
-      tb.appendChild(tr);
-    });
-  } catch (err) {
-    console.error('Fehler beim Laden der Summary:', err);
+    renderPager('userLedgerInfo', page, ledgerLimit, userLedgerTotal);
+    document.getElementById('ledgerPrev').disabled = page <= 1;
+    document.getElementById('ledgerNext').disabled = page * ledgerLimit >= userLedgerTotal;
+  } catch (e) {
+    console.error('Fehler bei loadUserLedger:', e);
   }
 }
+
+document.getElementById('ledgerPrev')?.addEventListener('click', () => {
+  if (userLedgerPage > 1) loadUserLedger(--userLedgerPage);
+});
+document.getElementById('ledgerNext')?.addEventListener('click', () => {
+  if (userLedgerPage * ledgerLimit < userLedgerTotal) loadUserLedger(++userLedgerPage);
+});
+
+// === Letzte 200 Ledger (ebenfalls paginiert, gleiche Logik) ===
+let lastLedgerPage = 1;
+let lastLedgerTotal = 0;
+
+async function loadLastLedger(page = 1) {
+  try {
+    const data = await api(`/admin/ledger?page=${page}&limit=${ledgerLimit}`);
+    const rows = data.items || [];
+    lastLedgerTotal = data.total || 0;
+
+    const tbody = document.querySelector('#lastTbl tbody');
+    if (!tbody) return;
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.id}</td>
+        <td>${r.user_id}</td>
+        <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
+        <td>${r.reason || ''}</td>
+        <td>${r.balance_after ?? ''}</td>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+      </tr>`).join('');
+
+    renderPager('lastLedgerInfo', page, ledgerLimit, lastLedgerTotal);
+    document.getElementById('lastPrev').disabled = page <= 1;
+    document.getElementById('lastNext').disabled = page * ledgerLimit >= lastLedgerTotal;
+  } catch (e) {
+    console.error('Fehler bei loadLastLedger:', e);
+  }
+}
+
+document.getElementById('lastPrev')?.addEventListener('click', () => {
+  if (lastLedgerPage > 1) loadLastLedger(--lastLedgerPage);
+});
+document.getElementById('lastNext')?.addEventListener('click', () => {
+  if (lastLedgerPage * ledgerLimit < lastLedgerTotal) loadLastLedger(++lastLedgerPage);
+});
+
+// === User-Summary modernisiert + Pagination ===
+let summaryPage = 1;
+let summaryTotal = 0;
+const summaryLimit = 10;
+
+async function loadUserSummary(page = 1, search = '') {
+  try {
+    const q = new URLSearchParams({ page, limit: summaryLimit, q: search });
+    const data = await api(`/admin/user-summary?${q.toString()}`);
+    const rows = data.items || [];
+    summaryTotal = data.total || 0;
+
+    const tbody = document.querySelector('#userSummaryTbl tbody');
+    if (!tbody) return;
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.id}</td>
+        <td>${r.email || ''}</td>
+        <td>${new Date(r.last_activity).toLocaleString()}</td>
+        <td>${r.total_bought ?? 0}</td>
+        <td>${r.total_spent ?? 0}</td>
+        <td class="text-yellow">${r.tokens ?? 0}</td>
+      </tr>`).join('');
+
+    renderPager('summaryInfo', page, summaryLimit, summaryTotal);
+    document.getElementById('summaryPrev').disabled = page <= 1;
+    document.getElementById('summaryNext').disabled = page * summaryLimit >= summaryTotal;
+  } catch (e) {
+    console.error('Fehler bei loadUserSummary:', e);
+  }
+}
+
+document.getElementById('summaryPrev')?.addEventListener('click', () => {
+  if (summaryPage > 1) loadUserSummary(--summaryPage);
+});
+document.getElementById('summaryNext')?.addEventListener('click', () => {
+  if (summaryPage * summaryLimit < summaryTotal) loadUserSummary(++summaryPage);
+});
+document.getElementById('summaryReload')?.addEventListener('click', () => {
+  const q = document.getElementById('summarySearch')?.value || '';
+  loadUserSummary(1, q);
+});
+
+loadUserLedger();
+loadLastLedger();
+loadUserSummary();
 
 // === Buttons verbinden ===
 document.getElementById('btnLoadSummary')

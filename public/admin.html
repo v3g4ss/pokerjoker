@@ -320,28 +320,23 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
 
  <!-- Summary -->
 <section class="card">
-  <h2>User-Summary 
-    <button class="right btn" id="btnLoadSummary">Aktualisieren</button>
-  </h2>
-  <div class="summary-search">
-    <input id="summarySearch" placeholder="E-Mail suchen…" class="input" />
-    <button id="btnSearchSummary" class="btn">🔍</button>
+  <h2>User-Summary</h2>
+  <div class="controls">
+    <input id="summarySearch" type="text" placeholder="E-Mail suchen…" />
+    <button id="summaryReload">🔍</button>
+    <div class="pager">
+      <button id="summaryPrev">←</button>
+      <button id="summaryNext">→</button>
+      <span id="summaryInfo">Einträge 1-10 von 0</span>
+    </div>
   </div>
-  <table id="summaryTbl" class="data-table">
+  <table id="userSummaryTbl" class="styled">
     <thead>
-      <tr>
-        <th>User</th>
-        <th>E-Mail</th>
-        <th>Time</th>
-        <th>Gekauft</th>
-        <th>Ausgegeben</th>
-        <th>Tokens</th>
-      </tr>
+      <tr><th>User</th><th>E-Mail</th><th>Time</th><th>Gekauft</th><th>Ausgegeben</th><th>Tokens</th></tr>
     </thead>
     <tbody></tbody>
   </table>
 </section>
-
 
   <!-- Letzte Ledger -->
  <section class="card">

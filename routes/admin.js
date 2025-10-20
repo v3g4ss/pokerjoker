@@ -432,19 +432,57 @@ router.get('/ledger/last200', async (_req, res) => {
   }
 });
 
-// GET /api/admin/summary
-router.get('/summary', async (req, res) => {
+// === Ledger mit Pagination (für Dashboard) ===
+router.get('/ledger', async (req, res) => {
   try {
-    const search = (req.query.q || '').trim().toLowerCase();
+    const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
+    const off   = (page - 1) * limit;
+
     const { rows } = await pool.query(`
-      SELECT user_id, email, last_update, gekauft, ausgegeben, aktuell
-      FROM v_token_user_summary
-      WHERE ($1 = '' OR LOWER(email) LIKE '%' || $1 || '%')
-      ORDER BY user_id ASC
-    `, [search]);
-    res.json(rows || []);
+      SELECT id, user_id, delta, reason, balance AS balance_after, created_at
+      FROM public.v_token_ledger_detailed
+      ORDER BY id DESC
+      LIMIT $1 OFFSET $2
+    `, [limit, off]);
+
+    const totalRes = await pool.query('SELECT COUNT(*)::int AS total FROM public.v_token_ledger_detailed');
+    res.json({ ok:true, items: rows, page, limit, total: totalRes.rows[0].total });
   } catch (e) {
-    console.error('GET /api/admin/summary', e);
+    console.error('GET /api/admin/ledger', e);
+    res.status(500).json({ ok:false, message:'Fehler beim Laden der Ledger-Daten' });
+  }
+});
+
+// === User Summary mit Pagination + Suche ===
+router.get('/user-summary', async (req, res) => {
+  try {
+    const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
+    const q     = (req.query.q || '').trim().toLowerCase();
+    const off   = (page - 1) * limit;
+
+    const where = q ? `WHERE LOWER(email) LIKE '%' || $3 || '%'` : '';
+    const params = [limit, off];
+    if (q) params.push(q);
+
+    const { rows } = await pool.query(`
+      SELECT user_id AS id, email, last_update AS last_activity,
+             gekauft AS total_bought, ausgegeben AS total_spent, aktuell AS tokens
+      FROM v_token_user_summary
+      ${where}
+      ORDER BY user_id ASC
+      LIMIT $1 OFFSET $2
+    `, params);
+
+    const { rows: cnt } = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM v_token_user_summary ${where}`,
+      q ? [q] : []
+    );
+
+    res.json({ ok:true, items: rows, page, limit, total: cnt[0].total });
+  } catch (e) {
+    console.error('GET /api/admin/user-summary', e);
     res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
   }
 });
