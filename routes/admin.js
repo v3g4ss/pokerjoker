@@ -137,59 +137,43 @@ async function sendMailOptional(app, { to, subject, text }) {
 router.get('/stats', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      WITH
-      customers AS (
-        SELECT COUNT(*)::bigint AS val
-        FROM public.users
-        WHERE is_admin = false AND deleted_at IS NULL
-      ),
-      admins AS (
-        SELECT COUNT(*)::bigint AS val
-        FROM public.users
-        WHERE is_admin = true AND deleted_at IS NULL
-      ),
-      messages_total AS (
-        SELECT COUNT(*)::bigint AS val
-        FROM public.messages
-      ),
-      messages_new AS (
-        SELECT COUNT(*)::bigint AS val
-        FROM public.messages m
-        WHERE NOT EXISTS (
-          SELECT 1 FROM public.message_replies r
-          WHERE r.message_id = m.id
-        )
-      ),
-      purchased AS (
-        SELECT COALESCE(SUM(delta),0)::bigint AS val
-        FROM public.token_ledger
-        WHERE delta > 0 AND LOWER(COALESCE(reason,'')) LIKE 'buy%'
-      ),
-      admin_granted AS (
-        SELECT COALESCE(SUM(delta),0)::bigint AS val
-        FROM public.token_ledger
-        WHERE delta > 0 AND LOWER(COALESCE(reason,'')) LIKE 'admin%'
-      ),
-      tokens_in_circulation AS (
-        SELECT COALESCE(SUM(tokens),0)::bigint AS val
-        FROM public.users
-        WHERE deleted_at IS NULL
-      )
       SELECT
-        (SELECT val FROM customers)             AS customers,
-        (SELECT val FROM admins)                AS admins,
-        (SELECT val FROM messages_total)        AS messages_total,
-        (SELECT val FROM messages_new)          AS messages_new,
-        (SELECT val FROM purchased)             AS purchased,
-        (SELECT val FROM admin_granted)         AS admin_granted,
-        (SELECT val FROM tokens_in_circulation) AS tokens_in_circulation
-      ;
+        -- Kunden = alle ohne Admin
+        (SELECT COUNT(*) FROM public.users WHERE NOT is_admin) AS customers,
+        -- Admins separat
+        (SELECT COUNT(*) FROM public.users WHERE is_admin) AS admins,
+
+        -- E-Mails
+        (SELECT COUNT(*) FROM public.messages) AS messages_total,
+        (SELECT COUNT(*) FROM public.messages m
+           WHERE NOT EXISTS (
+             SELECT 1 FROM public.message_replies r
+             WHERE r.message_id = m.id
+           )
+        ) AS messages_new,
+
+        -- Tokens gekauft (Buy-Ins)
+        COALESCE((
+          SELECT SUM(delta)::bigint
+          FROM public.token_ledger
+          WHERE delta > 0 AND LOWER(COALESCE(reason, '')) LIKE 'buy%'
+        ), 0) AS purchased,
+
+        -- Admin vergeben (+)
+        COALESCE((
+          SELECT SUM(delta)::bigint
+          FROM public.token_ledger
+          WHERE delta > 0 AND LOWER(COALESCE(reason, '')) LIKE 'admin%'
+        ), 0) AS admin_granted,
+
+        -- Tokens im Umlauf (Summe user.tokens)
+        (SELECT COALESCE(SUM(tokens),0) FROM public.users) AS tokens_in_circulation
     `);
 
-    res.json({ ok: true, stats: rows[0] || {} });
+    res.json({ ok: true, ...rows[0] });
   } catch (e) {
-    console.error('GET /api/admin/stats', e);
-    res.status(500).json({ ok: false, message: 'Fehler beim Laden der KPIs' });
+    console.error('GET /admin/stats error:', e);
+    res.status(500).json({ ok:false, message:'stats_failed' });
   }
 });
 
@@ -396,52 +380,29 @@ router.get('/users/:id/balance', async (req, res) => {
   }
 });
 
-// ============================================================
-// GET /api/admin/ledger/user/:id  → User-Ledger (kompatibel + verbessert)
-// ============================================================
+// GET /api/admin/ledger/user/:id
 router.get('/ledger/user/:id', async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     if (!Number.isInteger(userId))
       return res.status(400).json({ ok: false, message: 'Ungültige ID' });
 
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.max(1, parseInt(req.query.limit) || 10);
-    const offset = (page - 1) * limit;
-
-    // Gesamtanzahl für Pagination
-    const countRes = await pool.query(`
-      SELECT COUNT(*) AS total
-      FROM public.v_token_ledger_detailed
-      WHERE user_id = $1
-    `, [userId]);
-    const total = Number(countRes.rows[0]?.total || 0);
-
-    // Daten laden mit JOIN für Email
+    // GET /api/admin/ledger/user/:id
     const { rows } = await pool.query(`
       SELECT 
-        l.id,
-        l.user_id,
-        u.email,
-        l.delta,
-        l.reason,
-        l.balance AS balance_after,
-        l.created_at
-      FROM public.v_token_ledger_detailed l
-      LEFT JOIN public.users u ON u.id = l.user_id
-      WHERE l.user_id = $1
-      ORDER BY l.id DESC
-      LIMIT $2 OFFSET $3
-    `, [userId, limit, offset]);
+        id,
+        user_id,
+        delta,
+        reason,
+        balance AS balance_after,
+        created_at
+      FROM public.v_token_ledger_detailed
+      WHERE user_id = $1
+      ORDER BY id DESC
+      LIMIT 200
+    `, [userId]);
 
-    res.json({
-      ok: true,
-      data: rows,
-      total,
-      page,
-      pages: Math.ceil(total / limit)
-    });
-
+    res.json(rows || []);
   } catch (e) {
     console.error('GET /api/admin/ledger/user/:id', e);
     res.status(500).json({ ok: false, message: 'Fehler beim Laden des Ledgers' });
@@ -475,22 +436,12 @@ router.get('/ledger/last200', async (_req, res) => {
 router.get('/summary', async (req, res) => {
   try {
     const search = (req.query.q || '').trim().toLowerCase();
-
-    // Wir holen direkt den selben Wert aus users.tokens wie in "User anlegen"
     const { rows } = await pool.query(`
-      SELECT 
-        u.id           AS user_id,
-        u.email        AS email,
-        u.updated_at   AS last_update,
-        COALESCE(u.purchased, 0) AS gekauft,  -- gekauft bleibt wie gehabt
-        0              AS ausgegeben,          -- bleibt leer
-        COALESCE(u.tokens, 0) AS tokens        -- 💥 exakt der Wert aus User anlegen!
-      FROM public.users u
-      WHERE ($1 = '' OR LOWER(u.email) LIKE '%' || $1 || '%')
-        AND u.deleted_at IS NULL
-      ORDER BY u.id ASC
+      SELECT user_id, email, last_update, gekauft, ausgegeben, aktuell
+      FROM v_token_user_summary
+      WHERE ($1 = '' OR LOWER(email) LIKE '%' || $1 || '%')
+      ORDER BY user_id ASC
     `, [search]);
-
     res.json(rows || []);
   } catch (e) {
     console.error('GET /api/admin/summary', e);
@@ -905,56 +856,6 @@ router.post('/users/:id/tokens', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('❌ Token-Anpassung fehlgeschlagen:', err);
     return res.status(500).json({ ok: false, message: 'Serverfehler beim Token-Update' });
-  }
-});
-
-// ============================================================
-// FEHLENDE ROUTEN FÜR FRONTEND-KOMPATIBILITÄT
-// ============================================================
-
-// ============================================================
-// FIX: Ledger-Kompatibilität für Dashboard
-// ============================================================
-
-// GET /api/admin/ledger?limit=200
-router.get('/ledger', async (req, res) => {
-  try {
-    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit || '200', 10)));
-    const { rows } = await pool.query(`
-      SELECT 
-        id, user_id, delta, reason, balance_after, created_at
-      FROM public.token_ledger
-      ORDER BY id DESC
-      LIMIT $1
-    `, [limit]);
-    res.json({ ok: true, items: rows });
-  } catch (e) {
-    console.error('GET /api/admin/ledger', e);
-    res.status(500).json({ ok: false, message: e.message || 'Fehler beim Laden der Ledger' });
-  }
-});
-
-// GET /api/admin/user-ledger?page=1&limit=10
-router.get('/user-ledger', async (req, res) => {
-  try {
-    const page  = Math.max(1, parseInt(req.query.page || '1', 10));
-    const limit = Math.max(1, Math.min(200, parseInt(req.query.limit || '10', 10)));
-    const offset = (page - 1) * limit;
-
-    const { rows } = await pool.query(`
-      SELECT 
-        l.id, l.user_id, u.email, l.delta, l.reason, l.balance_after, l.created_at
-      FROM public.token_ledger l
-      LEFT JOIN public.users u ON u.id = l.user_id
-      ORDER BY l.id DESC
-      LIMIT $1 OFFSET $2
-    `, [limit, offset]);
-
-    const total = await pool.query(`SELECT COUNT(*)::int AS count FROM public.token_ledger`);
-    res.json({ ok: true, items: rows, page, limit, total: total.rows[0]?.count || 0 });
-  } catch (e) {
-    console.error('GET /api/admin/user-ledger', e);
-    res.status(500).json({ ok: false, message: e.message || 'Fehler beim Laden des User-Ledgers' });
   }
 });
 
