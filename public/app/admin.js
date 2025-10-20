@@ -327,6 +327,9 @@ async function loadLastLedger(page = 1) {
         <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
       </tr>`).join('');
 
+      // === Globale Einstellung für alle Ledger-Paginationen ===
+      const PAGE_SIZE = 10;
+
     // Pager
     const start = (page - 1) * PAGE_SIZE + 1;
     const end = Math.min(page * PAGE_SIZE, lastTotal);
@@ -354,10 +357,12 @@ const summaryLimit = 10;
 
 async function loadUserSummary(page = 1, search = '') {
   try {
-    const q = new URLSearchParams({ page, limit: summaryLimit, q: search });
-    const data = await api(`/admin/user-summary?${q.toString()}`);
-    const rows = data.items || [];
-    summaryTotal = data.total || 0;
+   const q = new URLSearchParams({ page, limit: summaryLimit });
+if (search) q.set('search', search);
+
+const data = await api(`/admin/user-summary?${q.toString()}`);
+const rows = data.items || [];
+summaryTotal = data.total || 0;
 
     const tbody = document.querySelector('#userSummaryTbl tbody');
     if (!tbody) return;
