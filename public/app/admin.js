@@ -15,18 +15,19 @@
   // === KPIs ===
   async function loadStats() {
     try {
-      const stats = await api('/admin/stats');
+      const data = await api('/admin/stats');
+      const stats = data?.stats || data;
       const set = (sel, val) => {
         const el = document.querySelector(sel);
         if (el) el.textContent = val ?? 0;
       };
       set('#statCustomers', stats.customers);
       set('#statAdmins', stats.admins);
-      set('#statEmails', stats.emails);
-      set('#statEmailsNew', stats.newEmails);
-      set('#statTokensBuyins', stats.tokens_buyin);
-      set('#statTokensAdmin', stats.tokens_admin);
-      set('#statTokensLive', stats.tokens_live);
+      set('#statEmails', stats.messages_total);
+      set('#statEmailsNew', stats.messages_new);
+      set('#statTokensBuyins', stats.purchased);
+      set('#statTokensAdmin', stats.admin_granted);
+      set('#statTokensLive', stats.tokens_in_circulation);
     } catch (e) {
       console.error('Fehler bei loadStats:', e);
     }
@@ -36,17 +37,16 @@
   async function loadUsers() {
     try {
       const data = await api('/admin/users');
-      const users = Array.isArray(data) ? data : (data.users || []);
+      const users = data.items || data.users || [];
       const tbody = document.querySelector('#usersTableBody');
       if (!tbody) return;
       tbody.innerHTML = users.map(u => `
         <tr>
           <td>${u.id}</td>
-          <td>${u.name || ''}</td>
           <td>${u.email || ''}</td>
           <td>${u.tokens ?? 0}</td>
-          <td>${u.role || ''}</td>
-          <td>${u.created_at ? new Date(u.created_at).toLocaleString() : ''}</td>
+          <td>${u.purchased ?? 0}</td>
+          <td>${u.is_admin ? 'Admin' : 'User'}</td>
         </tr>`).join('');
     } catch (e) {
       console.error('Fehler bei loadUsers:', e);
@@ -56,10 +56,8 @@
   // === Letzte 200 Ledger ===
   async function loadLedger200() {
     try {
-      // const data = await api('/admin/ledger200'); // <-- dein alter funktionierender Pfad
-      // const data = await api('/admin/ledger?limit=200');
-      const data = await api('/admin/ledger');  // <-- OHNE ?limit
-      const rows = Array.isArray(data) ? data : (data.ledger || []);
+      const data = await api('/admin/ledger?limit=200');
+      const rows = data.items || data;
       const tbody = document.querySelector('#ledgerTableBody');
       if (!tbody) return;
       tbody.innerHTML = rows.map(r => `
@@ -83,10 +81,8 @@
 
   async function loadUserLedger(page = 1) {
     try {
-      // const data = await api(`/admin/user-ledger?page=${page}&limit=${ledgerLimit}`); // alter Pfad!
-      // const data = await api(`/admin/ledger-detailed?page=${page}&limit=${ledgerLimit}`);
-      const data = await api(`/admin/user-ledger?page=${page}&limit=${ledgerLimit}`);  // <-- wieder alter Pfad
-      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const data = await api(`/admin/ledger-det?page=${page}&limit=${ledgerLimit}`);
+      const rows = data.items || data.data || [];
       ledgerTotal = data.total || 0;
       const tbody = document.querySelector('#ledgerTableBodyUser');
       if (!tbody) return;
@@ -116,38 +112,33 @@
   }
 
   // === Prompt Playground ===
-async function loadPromptSettings() {
-  try {
-    const data = await api('/admin/prompt');
-
-    const elPrompt = document.querySelector('#promptText');
-    const elRate = document.querySelector('#punctRate');
-    const elMax = document.querySelector('#maxUsedTokens');
-
-    if (elPrompt) elPrompt.value = data.prompt || '';
-    if (elRate) elRate.value = data.punct_rate || 1;
-    if (elMax) elMax.value = data.max_usedtokens_per_msg || 500;
-
-  } catch (e) {
-    console.error('Fehler bei loadPromptSettings:', e);
+  async function loadPromptSettings() {
+    try {
+      const data = await api('/admin/prompt');
+      const elPrompt = document.querySelector('#promptText');
+      const elRate = document.querySelector('#punctRate');
+      const elMax = document.querySelector('#maxUsedTokens');
+      if (elPrompt) elPrompt.value = data.prompt || '';
+      if (elRate) elRate.value = data.punct_rate || 1;
+      if (elMax) elMax.value = data.max_usedtokens_per_msg || 500;
+    } catch (e) {
+      console.error('Fehler bei loadPromptSettings:', e);
+    }
   }
-}
 
   // === Untermenüs ===
   async function loadMenuItems() {
     try {
-      // const data = await api('/admin-menu/items'); // wieder alter Pfad
-      // const data = await api('/admin/menu-items');
-      const data = await api('/admin-menu/items');  // <-- wieder alter Pfad
-      const items = Array.isArray(data) ? data : (data.items || []);
+      const data = await api('/admin/menu-items');
+      const items = data.items || [];
       const tbody = document.querySelector('#menuItemsTableBody');
       if (!tbody) return;
       tbody.innerHTML = items.map(i => `
         <tr>
           <td>${i.id}</td>
           <td>${i.title || ''}</td>
-          <td>${i.location || ''}</td>
-          <td>${i.created_at ? new Date(i.created_at).toLocaleString() : ''}</td>
+          <td>${i.href || ''}</td>
+          <td>${i.show_on || ''}</td>
         </tr>`).join('');
     } catch (e) {
       console.error('Fehler bei loadMenuItems:', e);
@@ -161,18 +152,11 @@ async function loadPromptSettings() {
       loadUserLedger(ledgerPage);
     }
   });
-
   document.getElementById('ledgerNext')?.addEventListener('click', () => {
     if (ledgerPage * ledgerLimit < ledgerTotal) {
       ledgerPage++;
       loadUserLedger(ledgerPage);
     }
-  });
-
-  document.getElementById('ledgerLoadBtn')?.addEventListener('click', () => {
-    const val = parseInt(document.getElementById('ledgerUserId').value);
-    ledgerPage = val > 0 ? val : 1;
-    loadUserLedger(ledgerPage);
   });
 
   // === Initial-Load ===
