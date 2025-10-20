@@ -318,8 +318,7 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
   </table>
 </div>
 
- <!-- Summary -->
-<section class="card">
+ <section class="card">
   <h2>User-Summary</h2>
   <div class="controls">
     <input id="summarySearch" type="text" placeholder="E-Mail suchen…" />
@@ -327,12 +326,20 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
     <div class="pager">
       <button id="summaryPrev">←</button>
       <button id="summaryNext">→</button>
-      <span id="summaryInfo">Einträge 1-10 von 0</span>
+      <span id="summaryInfo">Einträge 1–10 von 0</span>
     </div>
   </div>
+
   <table id="userSummaryTbl" class="styled">
     <thead>
-      <tr><th>User</th><th>E-Mail</th><th>Time</th><th>Gekauft</th><th>Ausgegeben</th><th>Tokens</th></tr>
+      <tr>
+        <th>User</th>
+        <th>E-Mail</th>
+        <th>Time</th>
+        <th>Gekauft</th>
+        <th>Ausgegeben</th>
+        <th>Tokens</th>
+      </tr>
     </thead>
     <tbody></tbody>
   </table>

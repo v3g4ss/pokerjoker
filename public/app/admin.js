@@ -257,7 +257,7 @@ let userLedgerTotal = 0;
 
 async function loadUserLedger(page = 1) {
   try {
-    const data = await api(`/admin/ledger-det?page=${page}&limit=${ledgerLimit}`);
+    const data = await api(`/admin/ledger?page=${page}&limit=${ledgerLimit}`);
     const rows = data.items || [];
     userLedgerTotal = data.total || 0;
 
