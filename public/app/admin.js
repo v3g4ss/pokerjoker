@@ -240,13 +240,22 @@ document.getElementById('btnCreateUser')?.addEventListener('click', async ()=>{
 });
 
 // ---- Ledger / Reports -----------------------------------------------------
-$('#btnLoadUserLedger')?.addEventListener('click', async ()=>{
-  const uid = parseInt($('#ledgerUserId')?.value, 10); if (!Number.isInteger(uid)) return;
+$('#btnLoadUserLedger')?.addEventListener('click', async ()=> {
+  const uid = parseInt($('#ledgerUserId')?.value, 10);
+  if (!Number.isInteger(uid)) return;
   const rows = await api(`/admin/ledger/user/${uid}`);
-  const tb = $('#userLedgerTbl tbody'); if (!tb) return; tb.innerHTML = '';
+  const tb = $('#userLedgerTbl tbody');
+  if (!tb) return;
+  tb.innerHTML = '';
   rows.slice(0,50).forEach(r=>{
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${r.id}</td><td class="mono">${r.delta}</td><td>${r.reason||''}</td><td class="mono">${r.balance_after}</td><td class="muted">${r.created_at}</td>`;
+    tr.innerHTML = `
+      <td>${r.id}</td>
+      <td class="mono">${r.user_id}</td>
+      <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
+      <td>${r.reason || ''}</td>
+      <td class="mono">${r.balance_after}</td>
+      <td class="muted">${new Date(r.created_at).toLocaleString()}</td>`;
     tb.appendChild(tr);
   });
 });
@@ -279,12 +288,20 @@ $('#btnLoadSummary')?.addEventListener('click', async ()=> {
   });
 });
 
-$('#btnLoadLast200')?.addEventListener('click', async ()=>{
+$('#btnLoadLast200')?.addEventListener('click', async ()=> {
   const rows = await api('/admin/ledger/last200');
-  const tb = $('#lastTbl tbody'); if (!tb) return; tb.innerHTML = '';
+  const tb = $('#lastTbl tbody');
+  if (!tb) return;
+  tb.innerHTML = '';
   rows.forEach(r=>{
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${r.id}</td><td class="mono">${r.user_id}</td><td class="mono">${r.delta}</td><td>${r.reason||''}</td><td class="mono">${r.balance_after}</td><td class="muted">${r.created_at}</td>`;
+    tr.innerHTML = `
+      <td>${r.id}</td>
+      <td class="mono">${r.user_id}</td>
+      <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
+      <td>${r.reason || ''}</td>
+      <td class="mono">${r.balance_after}</td>
+      <td class="muted">${new Date(r.created_at).toLocaleString()}</td>`;
     tb.appendChild(tr);
   });
 });
