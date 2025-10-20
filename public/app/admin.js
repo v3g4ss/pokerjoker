@@ -53,8 +53,8 @@
   // --- Letzte 200 Ledger laden ---
   async function loadLedger() {
     try {
-      const data = await api('/admin/ledger?limit=200');
-      // const data = await api('/admin/ledger-last200');
+      // ⬅ zurück auf deinen alten API-Pfad
+      const data = await api('/admin/ledger200');
       const ledger = Array.isArray(data) ? data : (data.ledger || []);
       const tbody = document.querySelector('#ledgerTableBody');
       if (!tbody) return;
@@ -80,8 +80,8 @@
 
   async function loadUserLedger(page = 1) {
     try {
-      const data = await api(`/admin/user-ledger?page=${page}&limit=${ledgerLimit}`);
-      // const data = await api('/admin/ledger-detailed');
+      // ⬅ wieder auf den alten Pfad
+      const data = await api('/admin/ledger-detailed');
       const rows = Array.isArray(data.rows) ? data.rows : [];
       ledgerTotal = data.total || 0;
       const tbody = document.querySelector('#ledgerTableBodyUser');
@@ -129,8 +129,8 @@
   // --- Untermenü Verwaltung ---
   async function loadMenuItems() {
     try {
-      const data = await api('/admin/menu-items');
-      // const data = await api('/admin-menu/items');
+      // ⬅ alter Pfad wiederhergestellt
+      const data = await api('/admin-menu');
       const items = Array.isArray(data) ? data : (data.items || []);
       const tbody = document.querySelector('#menuItemsTableBody');
       if (!tbody) return;
