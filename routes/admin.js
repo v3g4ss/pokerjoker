@@ -908,4 +908,50 @@ router.post('/users/:id/tokens', requireAdmin, async (req, res) => {
   }
 });
 
+// ============================================================
+// FEHLENDE ROUTEN FÜR FRONTEND-KOMPATIBILITÄT
+// ============================================================
+
+// GET /api/admin/ledger?limit=200  → letzte Ledger-Einträge (kompatibel)
+router.get('/ledger', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit || '200', 10)));
+    const { rows } = await pool.query(`
+      SELECT 
+        id, user_id, delta, reason, balance AS balance_after, created_at
+      FROM public.token_ledger
+      ORDER BY created_at DESC
+      LIMIT $1
+    `, [limit]);
+    res.json({ ok: true, items: rows });
+  } catch (e) {
+    console.error('GET /api/admin/ledger', e);
+    res.status(500).json({ ok: false, message: 'Fehler beim Laden des Ledgers' });
+  }
+});
+
+// GET /api/admin/ledger-det?page=1&limit=10 → paginierte Ledger-Liste
+router.get('/ledger-det', async (req, res) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.max(1, Math.min(200, parseInt(req.query.limit || '10', 10)));
+    const offset = (page - 1) * limit;
+
+    const { rows } = await pool.query(`
+      SELECT 
+        l.id, l.user_id, u.email, l.delta, l.reason, l.balance AS balance_after, l.created_at
+      FROM public.token_ledger l
+      LEFT JOIN public.users u ON u.id = l.user_id
+      ORDER BY l.created_at DESC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    const total = await pool.query(`SELECT COUNT(*)::int AS count FROM public.token_ledger`);
+    res.json({ ok: true, items: rows, page, limit, total: total.rows[0]?.count || 0 });
+  } catch (e) {
+    console.error('GET /api/admin/ledger-det', e);
+    res.status(500).json({ ok: false, message: 'Fehler beim Laden der Ledger-Details' });
+  }
+});
+
 module.exports = router;

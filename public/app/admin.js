@@ -57,7 +57,8 @@
   async function loadLedger200() {
     try {
       // const data = await api('/admin/ledger200'); // <-- dein alter funktionierender Pfad
-      const data = await api('/admin/ledger?limit=200');
+      // const data = await api('/admin/ledger?limit=200');
+      const data = await api('/admin/ledger');  // <-- OHNE ?limit
       const rows = Array.isArray(data) ? data : (data.ledger || []);
       const tbody = document.querySelector('#ledgerTableBody');
       if (!tbody) return;
@@ -83,7 +84,8 @@
   async function loadUserLedger(page = 1) {
     try {
       // const data = await api(`/admin/user-ledger?page=${page}&limit=${ledgerLimit}`); // alter Pfad!
-      const data = await api(`/admin/ledger-detailed?page=${page}&limit=${ledgerLimit}`);
+      // const data = await api(`/admin/ledger-detailed?page=${page}&limit=${ledgerLimit}`);
+      const data = await api(`/admin/user-ledger?page=${page}&limit=${ledgerLimit}`);  // <-- wieder alter Pfad
       const rows = Array.isArray(data.rows) ? data.rows : [];
       ledgerTotal = data.total || 0;
       const tbody = document.querySelector('#ledgerTableBodyUser');
@@ -135,7 +137,8 @@ async function loadPromptSettings() {
   async function loadMenuItems() {
     try {
       // const data = await api('/admin-menu/items'); // wieder alter Pfad
-      const data = await api('/admin/menu-items');
+      // const data = await api('/admin/menu-items');
+      const data = await api('/admin-menu/items');  // <-- wieder alter Pfad
       const items = Array.isArray(data) ? data : (data.items || []);
       const tbody = document.querySelector('#menuItemsTableBody');
       if (!tbody) return;
