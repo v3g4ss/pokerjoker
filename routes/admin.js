@@ -386,16 +386,17 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT l.id,
-             l.user_id,
-             u.email,
-             l.delta,
-             l.reason,
-             l.balance_after,
-             l.created_at
-      FROM token_ledger l
-      LEFT JOIN users u ON u.id = l.user_id
-      WHERE l.user_id = $1
-      ORDER BY l.id DESC
+       l.user_id,
+       u.email,
+       l.delta,
+       l.reason,
+       l.balance_after AS balance,
+       l.created_at
+    FROM token_ledger l
+    LEFT JOIN users u ON u.id = l.user_id
+    WHERE l.user_id = $1
+    ORDER BY l.id DESC
+
     `, [id]);
     res.json(rows);
   } catch (err) {
