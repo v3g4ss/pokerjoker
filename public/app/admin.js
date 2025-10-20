@@ -310,7 +310,7 @@ document.getElementById('ledgerNext')?.addEventListener('click', () => {
 // === Letzte 200 Ledger (ebenfalls paginiert, gleiche Logik) ===
 let lastPage = 1;
 let lastTotal = 0;
-const PAGE_SIZE = 10; // sicherstellen, dass das hier oben definiert ist!
+
 
 async function loadLastLedger(page = 1) {
   try {
