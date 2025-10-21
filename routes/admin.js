@@ -470,23 +470,21 @@ router.get('/user-summary', async (req, res) => {
       params = [limit, off];
     }
 
-    // --- Query ---
-    const { rows } = await pool.query(`
+      const { rows } = await pool.query(`
       SELECT 
         s.user_id AS id,
         s.email,
         s.last_update AS last_activity,
         s.gekauft AS total_bought,
         s.ausgegeben AS total_spent,
-        COALESCE(ld.balance, 0) AS balance
+        COALESCE((
+          SELECT l.balance
+          FROM v_token_ledger_detailed l
+          WHERE l.user_id = s.user_id
+          ORDER BY l.id DESC
+          LIMIT 1
+        ), 0) AS balance
       FROM v_token_user_summary s
-      LEFT JOIN LATERAL (
-        SELECT balance
-        FROM v_token_ledger_detailed l
-        WHERE l.user_id = s.user_id
-        ORDER BY id DESC
-        LIMIT 1
-      ) ld ON true
       ${where}
       ORDER BY s.user_id ASC
       LIMIT ${q ? '$2' : '$1'} OFFSET ${q ? '$3' : '$2'}
