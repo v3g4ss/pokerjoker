@@ -441,11 +441,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (summaryPage * summaryLimit < summaryTotal) loadUserSummary(++summaryPage);
   });
 
-  document.getElementById('summaryReload')?.addEventListener('click', () => {
-    const q = document.getElementById('summarySearch')?.value.trim() || '';
-    summaryPage = 1;
-    loadUserSummary(summaryPage, q);
-  });
+  // === User-Summary: Suche + Enter ===
+const summarySearchInput = document.getElementById('summarySearch');
+const summaryReloadBtn   = document.getElementById('summaryReload');
+
+summaryReloadBtn?.addEventListener('click', () => {
+  const search = summarySearchInput?.value.trim() || '';
+  loadUserSummary(1, search);
+});
+
+summarySearchInput?.addEventListener('keypress', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const search = summarySearchInput?.value.trim() || '';
+    loadUserSummary(1, search);
+  }
+});
 
   // === Auto-Start ===
   loadUserSummary();
