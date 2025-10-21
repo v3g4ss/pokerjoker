@@ -408,40 +408,13 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
     const { rows } = await pool.query(`
-      SELECT 
-        l.id,
-        l.user_id,
-        u.email,
-        l.delta,
-        l.reason,
-        v.balance,
-        l.created_at
-      FROM token_ledger l
-      LEFT JOIN users u ON u.id = l.user_id
-      LEFT JOIN v_user_balances_live v ON v.user_id = l.user_id
-      WHERE l.user_id = $1
-      ORDER BY l.id DESC
-    `, [id]);
-
-    res.json(rows);
-  } catch (err) {
-    console.error('❌ Fehler bei /ledger/user/:id:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/admin/ledger/user/:id
-router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
-  const { id } = req.params;
-  try {
-    const { rows } = await pool.query(`
       SELECT
         v.id,
         v.user_id,
         u.email,
         v.delta,
         v.reason,
-        v.balance,
+        v.balance_after,
         v.created_at
       FROM public.v_token_ledger_last200 v
       LEFT JOIN public.users u ON u.id = v.user_id
