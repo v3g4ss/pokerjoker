@@ -430,26 +430,28 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// GET /api/admin/ledger/last200
-router.get('/ledger/last200', async (_req, res) => {
+// GET /api/admin/ledger/user/:id
+router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
   try {
-    // GET /api/admin/ledger/last200
     const { rows } = await pool.query(`
-      SELECT 
-        id,
-        user_id,
-        delta,
-        reason,
-        balance AS balance_after,
-        created_at
-      FROM public.v_token_ledger_last200
-      ORDER BY id DESC
-      LIMIT 200
-    `);
-    res.json(rows || []);
-  } catch (e) {
-    console.error('GET /api/admin/ledger/last200', e);
-    res.status(500).json({ ok: false, message: 'Fehler beim Laden der letzten Einträge' });
+      SELECT
+        v.id,
+        v.user_id,
+        u.email,
+        v.delta,
+        v.reason,
+        v.balance,
+        v.created_at
+      FROM public.v_token_ledger_last200 v
+      LEFT JOIN public.users u ON u.id = v.user_id
+      WHERE v.user_id = $1
+      ORDER BY v.id DESC
+    `, [id]);
+    res.json(rows);
+  } catch (err) {
+    console.error('❌ Fehler bei /ledger/user/:id:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
