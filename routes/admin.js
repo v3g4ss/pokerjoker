@@ -414,14 +414,11 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
         u.email,
         l.delta,
         l.reason,
-        -- sichere Spalte
-        CASE
-          WHEN l.balance_after IS NOT NULL THEN l.balance_after
-          ELSE 0
-        END AS balance,
+        COALESCE(v.balance, 0) AS balance,
         l.created_at
       FROM public.token_ledger l
       LEFT JOIN public.users u ON u.id = l.user_id
+      LEFT JOIN public.v_user_balances_live v ON v.user_id = l.user_id
       WHERE l.user_id = $1
       ORDER BY l.id DESC
     `, [id]);
