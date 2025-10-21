@@ -470,7 +470,7 @@ router.get('/user-summary', async (req, res) => {
           u.updated_at AS last_activity,
           COALESCE(SUM(CASE WHEN v.delta > 0 THEN v.delta ELSE 0 END), 0) AS total_bought,
           COALESCE(SUM(CASE WHEN v.delta < 0 THEN ABS(v.delta) ELSE 0 END), 0) AS total_spent,
-          COALESCE(MAX(v.balance_after), 0) AS balance
+          COALESCE(MAX(v.balance), 0) AS balance
         FROM public.users u
         LEFT JOIN public.v_token_ledger_detailed v ON v.user_id = u.id
         WHERE LOWER(u.email) LIKE '%' || $3 || '%'
@@ -487,7 +487,7 @@ router.get('/user-summary', async (req, res) => {
           u.updated_at AS last_activity,
           COALESCE(SUM(CASE WHEN v.delta > 0 THEN v.delta ELSE 0 END), 0) AS total_bought,
           COALESCE(SUM(CASE WHEN v.delta < 0 THEN ABS(v.delta) ELSE 0 END), 0) AS total_spent,
-          COALESCE(MAX(v.balance_after), 0) AS balance
+          COALESCE(MAX(v.balance), 0) AS balance
         FROM public.users u
         LEFT JOIN public.v_token_ledger_detailed v ON v.user_id = u.id
         GROUP BY u.id, u.email, u.updated_at
