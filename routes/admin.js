@@ -460,33 +460,45 @@ router.get('/user-summary', async (req, res) => {
     const q     = (req.query.search || req.query.q || '').trim().toLowerCase();
     const off   = (page - 1) * limit;
 
-        let where = '';
+    let where = '';
     let params = [];
     if (q) {
-      where = `WHERE LOWER(email) LIKE '%' || $1 || '%'`;
+      where = `WHERE LOWER(s.email) LIKE '%' || $1 || '%'`;
       params = [q, limit, off];
     } else {
       params = [limit, off];
     }
 
-        const { rows } = await pool.query(`
-      SELECT user_id AS id, email, last_update AS last_activity,
-            gekauft AS total_bought, ausgegeben AS total_spent, aktuell AS tokens
-      FROM v_token_user_summary
+    const { rows } = await pool.query(`
+      SELECT 
+        s.user_id AS id,
+        s.email,
+        s.last_update AS last_activity,
+        s.gekauft AS total_bought,
+        s.ausgegeben AS total_spent,
+        COALESCE(d.balance, 0) AS tokens
+      FROM v_token_user_summary s
+      LEFT JOIN (
+        SELECT user_id, balance
+        FROM v_token_ledger_detailed
+        WHERE id IN (
+          SELECT MAX(id) FROM v_token_ledger_detailed GROUP BY user_id
+        )
+      ) d ON d.user_id = s.user_id
       ${where}
-      ORDER BY user_id ASC
+      ORDER BY s.user_id ASC
       LIMIT ${q ? '$2' : '$1'} OFFSET ${q ? '$3' : '$2'}
     `, params);
 
     const { rows: cnt } = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM v_token_user_summary ${where}`,
+      `SELECT COUNT(*)::int AS total FROM v_token_user_summary s ${where}`,
       q ? [q] : []
     );
 
-    res.json({ ok:true, items: rows, page, limit, total: cnt[0].total });
+    res.json({ ok: true, items: rows, page, limit, total: cnt[0].total });
   } catch (e) {
     console.error('GET /api/admin/user-summary', e);
-    res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
+    res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
   }
 });
 
