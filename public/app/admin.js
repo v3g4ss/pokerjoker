@@ -284,16 +284,16 @@ function renderUserLedger(page = 1) {
   const startIdx = (page - 1) * PAGE_SIZE;
   const slice = userLedgerCache.slice(startIdx, startIdx + PAGE_SIZE);
 
-  tb.innerHTML = slice.map(r => `
-    <tr>
-      <td>${esc(r.id)}</td>
-      <td>${esc(r.email || '')}</td>
-      <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
-      <td>${esc(r.reason || '')}</td>
-      <td>${esc(r.balance ?? r.balance_after ?? '')}</td>
-      <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
-    </tr>
-  `).join('');
+ tb.innerHTML = slice.map(r => `
+  <tr>
+    <td>${esc(r.id)}</td>
+    <td>${esc(r.email || '')}</td>
+    <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
+    <td>${esc(r.reason || '')}</td>
+    <td>${esc(r.balance_after ?? r.balance ?? '')}</td>
+    <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
+  </tr>
+`).join('');
 
   const start = userLedgerTotal ? startIdx + 1 : 0;
   const end = Math.min(page * PAGE_SIZE, userLedgerTotal);
