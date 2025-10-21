@@ -445,9 +445,9 @@ document.addEventListener('DOMContentLoaded', () => {
 const summarySearchInput = document.getElementById('summarySearch');
 const summaryReloadBtn   = document.getElementById('summaryReload');
 
-summaryReloadBtn?.addEventListener('click', () => {
-  const search = summarySearchInput?.value.trim() || '';
-  loadUserSummary(1, search);
+document.getElementById('summaryReload')?.addEventListener('click', () => {
+  const q = document.getElementById('summarySearch')?.value.trim() || '';
+  loadUserSummary(1, q);
 });
 
 summarySearchInput?.addEventListener('keypress', e => {
