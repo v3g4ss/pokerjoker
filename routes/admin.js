@@ -452,22 +452,17 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-// === User Summary mit Pagination + Suche ===
+/// === User Summary mit Pagination + Suche ===
 router.get('/user-summary', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
-    const q     = (req.query.search || req.query.q || '').trim().toLowerCase();
+    const q     = (req.query.q || '').trim().toLowerCase();
     const off   = (page - 1) * limit;
 
-    let where = '';
-    let params = [];
-    if (q) {
-      where = `WHERE LOWER(s.email) LIKE '%' || $1 || '%'`;
-      params = [q, limit, off];
-    } else {
-      params = [limit, off];
-    }
+    const where = q ? `WHERE LOWER(s.email) LIKE '%' || $3 || '%'` : '';
+    const params = [limit, off];
+    if (q) params.push(q);
 
     const { rows } = await pool.query(`
       SELECT 
@@ -476,17 +471,18 @@ router.get('/user-summary', async (req, res) => {
         s.last_update AS last_activity,
         s.gekauft AS total_bought,
         s.ausgegeben AS total_spent,
-        COALESCE((
-          SELECT l.balance
-          FROM v_token_ledger_detailed l
-          WHERE l.user_id = s.user_id
-          ORDER BY l.id DESC
-          LIMIT 1
-        ), 0) AS balance
+        COALESCE(ld.balance, 0) AS balance   -- hier wird aus v_token_ledger_detailed gelesen
       FROM v_token_user_summary s
+      LEFT JOIN (
+        SELECT user_id, balance
+        FROM v_token_ledger_detailed
+        WHERE id IN (
+          SELECT MAX(id) FROM v_token_ledger_detailed GROUP BY user_id
+        )
+      ) ld ON ld.user_id = s.user_id
       ${where}
       ORDER BY s.user_id ASC
-      LIMIT ${q ? '$2' : '$1'} OFFSET ${q ? '$3' : '$2'}
+      LIMIT $1 OFFSET $2
     `, params);
 
     const { rows: cnt } = await pool.query(
