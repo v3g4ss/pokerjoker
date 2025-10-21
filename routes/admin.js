@@ -410,22 +410,23 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT 
         l.id,
-        l.user_id,
+        COALESCE(l.user_id, l.uid) AS user_id,
         u.email,
         l.delta,
         l.reason,
         l.balance_after AS balance,
         l.created_at
       FROM public.v_token_ledger_detailed l
-      LEFT JOIN public.users u ON u.id = l.user_id
-      WHERE l.user_id = $1
+      LEFT JOIN public.users u 
+        ON u.id = COALESCE(l.user_id, l.uid)
+      WHERE COALESCE(l.user_id, l.uid) = $1
       ORDER BY l.id DESC
     `, [id]);
 
     res.json(rows);
   } catch (err) {
-    console.error('❌ Fehler bei /ledger/user/:id', err.message);
-    res.status(500).json({ error: 'DB error' });
+    console.error('❌ Fehler bei /ledger/user/:id:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
