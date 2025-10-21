@@ -414,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <td>${r.last_activity ? new Date(r.last_activity).toLocaleString() : '-'}</td>
             <td>${r.total_bought ?? 0}</td>
             <td>${r.total_spent ?? 0}</td>
-            <td class="${r.tokens > 0 ? 'text-green' : 'text-red'}">${r.tokens ?? 0}</td>
+            <td class="${r.balance  > 0 ? 'text-green' : 'text-red'}">${r.tokens ?? 0}</td>
           </tr>
         `).join('')
         : `<tr><td colspan="6" class="text-center text-gray">Keine Einträge gefunden</td></tr>`;

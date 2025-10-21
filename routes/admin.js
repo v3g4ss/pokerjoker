@@ -478,7 +478,7 @@ router.get('/user-summary', async (req, res) => {
         s.last_update AS last_activity,
         s.gekauft AS total_bought,
         s.ausgegeben AS total_spent,
-        COALESCE(ld.balance, 0) AS tokens
+        COALESCE(ld.balance, 0) AS balance
       FROM v_token_user_summary s
       LEFT JOIN LATERAL (
         SELECT balance
