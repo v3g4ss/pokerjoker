@@ -290,7 +290,7 @@ function renderUserLedger(page = 1) {
       <td>${esc(r.email || '')}</td>
       <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
       <td>${esc(r.reason || '')}</td>
-      <td>${r.balance_after ?? ''}</td>
+      <td>${esc(r.balance ?? r.balance_after ?? '')}</td>
       <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
     </tr>
   `).join('');

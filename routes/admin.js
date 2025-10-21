@@ -414,14 +414,14 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
         u.email,
         l.delta,
         l.reason,
-        COALESCE(v.balance, 0) AS balance,
+        l.balance_after AS balance,
         l.created_at
-      FROM public.token_ledger l
+      FROM public.v_token_ledger_detailed l
       LEFT JOIN public.users u ON u.id = l.user_id
-      LEFT JOIN public.v_user_balances_live v ON v.user_id = l.user_id
       WHERE l.user_id = $1
       ORDER BY l.id DESC
     `, [id]);
+
     res.json(rows);
   } catch (err) {
     console.error('❌ Fehler bei /ledger/user/:id', err.message);
