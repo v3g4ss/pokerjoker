@@ -466,24 +466,26 @@ router.get('/user-summary', async (req, res) => {
 
     const { rows } = await pool.query(`
       SELECT 
-        s.user_id AS id,
-        s.email,
-        s.last_update AS last_activity,
-        s.gekauft AS total_bought,
-        s.ausgegeben AS total_spent,
-        COALESCE(ld.balance, 0) AS balance   -- hier wird aus v_token_ledger_detailed gelesen
-      FROM v_token_user_summary s
+        u.id,
+        u.email,
+        u.last_update AS last_activity,
+        u.gekauft AS total_bought,
+        u.ausgegeben AS total_spent,
+        COALESCE(l.balance_after, 0) AS balance
+      FROM users u
       LEFT JOIN (
-        SELECT user_id, balance
+        SELECT user_id, balance_after
         FROM v_token_ledger_detailed
         WHERE id IN (
-          SELECT MAX(id) FROM v_token_ledger_detailed GROUP BY user_id
+          SELECT MAX(id)
+          FROM v_token_ledger_detailed
+          GROUP BY user_id
         )
-      ) ld ON ld.user_id = s.user_id
-      ${where}
-      ORDER BY s.user_id ASC
+      ) l ON l.user_id = u.id
+      ${q ? `WHERE LOWER(u.email) LIKE '%' || $3 || '%'` : ''}
+      ORDER BY u.id ASC
       LIMIT $1 OFFSET $2
-    `, params);
+    `, q ? [limit, off, q] : [limit, off]);
 
     const { rows: cnt } = await pool.query(
       `SELECT COUNT(*)::int AS total FROM v_token_user_summary s ${where}`,
