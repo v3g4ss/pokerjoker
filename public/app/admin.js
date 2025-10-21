@@ -252,14 +252,6 @@ function renderPager(infoId, page, limit, total) {
   el.textContent = `Einträge ${start}–${end} von ${total}`;
 }
 
-// --- helpers ---
-const esc = (s) => (s ?? '').toString()
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
-
 // === User Ledger (mit Pagination) ===
 let userLedgerPage = 1;
 let userLedgerTotal = 0;
