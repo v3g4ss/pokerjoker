@@ -414,8 +414,11 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
         u.email,
         l.delta,
         l.reason,
-        -- wichtig: richtige Spalte / Alias wie bei v_token_ledger_last200
-        COALESCE(l.balance_after, l.balance, 0) AS balance,
+        -- sichere Spalte
+        CASE
+          WHEN l.balance_after IS NOT NULL THEN l.balance_after
+          ELSE 0
+        END AS balance,
         l.created_at
       FROM public.token_ledger l
       LEFT JOIN public.users u ON u.id = l.user_id
@@ -424,7 +427,7 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
     `, [id]);
     res.json(rows);
   } catch (err) {
-    console.error('Fehler bei /ledger/user/:id', err);
+    console.error('❌ Fehler bei /ledger/user/:id', err.message);
     res.status(500).json({ error: 'DB error' });
   }
 });
