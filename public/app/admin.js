@@ -327,7 +327,7 @@ async function loadLastLedger(page = 1) {
         <td>${r.user_id}</td>
         <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
         <td>${r.reason || ''}</td>
-        <td>${r.balance_after ?? ''}</td>
+        <td>${esc(it.balance ?? it.balance_after ?? '')}</td>
         <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
       </tr>
     `).join('');
