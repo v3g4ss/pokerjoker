@@ -476,10 +476,10 @@ router.get('/user-summary', async (req, res) => {
         s.last_update AS last_activity,
         s.gekauft AS total_bought,
         s.ausgegeben AS total_spent,
-        COALESCE(d.balance, 0) AS tokens
+        COALESCE(d.balance_after, 0) AS tokens
       FROM v_token_user_summary s
       LEFT JOIN (
-        SELECT user_id, balance
+        SELECT user_id, balance_after
         FROM v_token_ledger_detailed
         WHERE id IN (
           SELECT MAX(id) FROM v_token_ledger_detailed GROUP BY user_id
@@ -495,10 +495,10 @@ router.get('/user-summary', async (req, res) => {
       q ? [q] : []
     );
 
-    res.json({ ok: true, items: rows, page, limit, total: cnt[0].total });
+    res.json({ ok:true, items: rows, page, limit, total: cnt[0].total });
   } catch (e) {
     console.error('GET /api/admin/user-summary', e);
-    res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
+    res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
   }
 });
 
