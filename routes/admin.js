@@ -452,21 +452,6 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-// === User Summary mit Pagination + Suche (wie Ledger-Kacheln) ===
-router.get('/user-summary', async (req, res) => {
-  try {
-    const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
-    const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
-    const q     = (req.query.search || req.query.q || '').trim().toLowerCase();
-    const off   = (page - 1) * limit;
-
-    let where = '';
-    const params = [limit, off];
-    if (q) {
-      where = `WHERE LOWER(u.email) LIKE '%' || $3 || '%'`;
-      params.push(q);
-    }
-
     // === User Summary mit Pagination + Suche (Balance korrekt aus v_token_ledger_detailed) ===
 router.get('/user-summary', async (req, res) => {
   try {
@@ -925,8 +910,9 @@ router.post('/users/:id/tokens', requireAdmin, async (req, res) => {
     return res.json({ ok: true, balance: result.balance });
   } catch (err) {
     console.error('❌ Token-Anpassung fehlgeschlagen:', err);
-    return res.status(500).json({ ok: false, message: 'Serverfehler beim Token-Update' });
+      return res.status(500).json({ ok:false, message:'Serverfehler beim Token-Update' });
   }
 });
 
 module.exports = router;
+
