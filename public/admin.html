@@ -312,21 +312,33 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
   </table>
 </section>
 
- <!-- Summary -->
+ <!-- === User-Summary === -->
 <section class="card">
   <h2>User-Summary</h2>
-  <div class="controls">
-    <input id="summarySearch" type="text" placeholder="E-Mail suchen…" />
-    <button id="summaryReload">🔍</button>
-    <div class="pager">
-      <button id="summaryPrev">←</button>
-      <button id="summaryNext">→</button>
-      <span id="summaryInfo">Einträge 1-10 von 0</span>
+
+  <div class="ledger-header">
+    <div class="ledger-controls">
+      <input id="summarySearch" type="text" placeholder="E-Mail suchen…" />
+      <button id="summaryReload">Laden</button>
+
+      <div class="ledger-nav">
+        <button class="btn-nav" id="summaryPrev">←</button>
+        <button class="btn-nav" id="summaryNext">→</button>
+        <span id="summaryInfo" class="ledger-info">Einträge 0–0 von 0</span>
+      </div>
     </div>
   </div>
+
   <table id="userSummaryTbl" class="styled">
     <thead>
-      <tr><th>User</th><th>E-Mail</th><th>Time</th><th>Gekauft</th><th>Ausgegeben</th><th>Tokens</th></tr>
+      <tr>
+        <th>User</th>
+        <th>E-Mail</th>
+        <th>Time</th>
+        <th>Gekauft</th>
+        <th>Ausgegeben</th>
+        <th>Tokens</th>
+      </tr>
     </thead>
     <tbody></tbody>
   </table>

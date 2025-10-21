@@ -368,8 +368,12 @@ async function loadLastLedger(page = 1) {
   }
 }
 
-// Navigation Buttons
+// ===============================
+// Initialisierung Admin Dashboard
+// ===============================
 document.addEventListener('DOMContentLoaded', () => {
+
+  // === Navigation für "Letzte Ledger" ===
   const prevBtn = document.getElementById('lastLedgerPrev');
   const nextBtn = document.getElementById('lastLedgerNext');
 
@@ -377,65 +381,75 @@ document.addEventListener('DOMContentLoaded', () => {
     prevBtn.addEventListener('click', () => {
       if (lastPage > 1) loadLastLedger(--lastPage);
     });
-
     nextBtn.addEventListener('click', () => {
       if (lastPage * PAGE_SIZE < lastTotal) loadLastLedger(++lastPage);
     });
   }
 
-  // Initialer Load
+  // === Initialer Load Ledger ===
   loadLastLedger();
-});
 
+  // === User-Summary modernisiert + Pagination ===
+  let summaryPage = 1;
+  let summaryTotal = 0;
+  const summaryLimit = 10;
 
-// === User-Summary modernisiert + Pagination ===
-let summaryPage = 1;
-let summaryTotal = 0;
-const summaryLimit = 10;
+  async function loadUserSummary(page = 1, search = '') {
+    try {
+      const q = new URLSearchParams({ page, limit: summaryLimit });
+      if (search) q.set('search', search);
 
-async function loadUserSummary(page = 1, search = '') {
-  try {
-   const q = new URLSearchParams({ page, limit: summaryLimit });
-if (search) q.set('search', search);
+      const data = await api(`/admin/user-summary?${q.toString()}`);
+      const rows = Array.isArray(data.items) ? data.items : [];
+      summaryTotal = data.total || rows.length;
 
-const data = await api(`/admin/user-summary?${q.toString()}`);
-const rows = data.items || [];
-summaryTotal = data.total || 0;
+      const tbody = document.querySelector('#userSummaryTbl tbody');
+      if (!tbody) return;
 
-    const tbody = document.querySelector('#userSummaryTbl tbody');
-    if (!tbody) return;
-    tbody.innerHTML = rows.map(r => `
-      <tr>
-        <td>${r.id}</td>
-        <td>${r.email || ''}</td>
-        <td>${r.last_activity ? new Date(r.last_activity).toLocaleString() : '-'}</td>
-        <td>${r.total_bought ?? 0}</td>
-        <td>${r.total_spent ?? 0}</td>
-        <td class="text-yellow">${r.tokens ?? 0}</td>
-      </tr>`).join('');
+      tbody.innerHTML = rows.length
+        ? rows.map(r => `
+          <tr>
+            <td>${r.id ?? ''}</td>
+            <td>${r.email || ''}</td>
+            <td>${r.last_activity ? new Date(r.last_activity).toLocaleString() : '-'}</td>
+            <td>${r.total_bought ?? 0}</td>
+            <td>${r.total_spent ?? 0}</td>
+            <td class="${r.tokens > 0 ? 'text-green' : 'text-red'}">${r.tokens ?? 0}</td>
+          </tr>
+        `).join('')
+        : `<tr><td colspan="6" class="text-center text-gray">Keine Einträge gefunden</td></tr>`;
 
-    renderPager('summaryInfo', page, summaryLimit, summaryTotal);
-    document.getElementById('summaryPrev').disabled = page <= 1;
-    document.getElementById('summaryNext').disabled = page * summaryLimit >= summaryTotal;
-  } catch (e) {
-    console.error('Fehler bei loadUserSummary:', e);
+      if (typeof renderPager === 'function') {
+        renderPager('summaryInfo', page, summaryLimit, summaryTotal);
+      }
+
+      document.getElementById('summaryPrev').disabled = page <= 1;
+      document.getElementById('summaryNext').disabled = page * summaryLimit >= summaryTotal;
+
+    } catch (e) {
+      console.error('Fehler bei loadUserSummary:', e);
+      document.getElementById('summaryInfo').textContent = 'Fehler beim Laden';
+    }
   }
-}
 
-document.getElementById('summaryPrev')?.addEventListener('click', () => {
-  if (summaryPage > 1) loadUserSummary(--summaryPage);
-});
-document.getElementById('summaryNext')?.addEventListener('click', () => {
-  if (summaryPage * summaryLimit < summaryTotal) loadUserSummary(++summaryPage);
-});
-document.getElementById('summaryReload')?.addEventListener('click', () => {
-  const q = document.getElementById('summarySearch')?.value || '';
-  loadUserSummary(1, q);
-});
+  // === Events ===
+  document.getElementById('summaryPrev')?.addEventListener('click', () => {
+    if (summaryPage > 1) loadUserSummary(--summaryPage);
+  });
 
-loadLastLedger();     // automatisch
-loadUserSummary();    // automatisch
-// KEIN automatisches loadUserLedger();
+  document.getElementById('summaryNext')?.addEventListener('click', () => {
+    if (summaryPage * summaryLimit < summaryTotal) loadUserSummary(++summaryPage);
+  });
+
+  document.getElementById('summaryReload')?.addEventListener('click', () => {
+    const q = document.getElementById('summarySearch')?.value.trim() || '';
+    summaryPage = 1;
+    loadUserSummary(summaryPage, q);
+  });
+
+  // === Auto-Start ===
+  loadUserSummary();
+});
 
 // === Buttons verbinden ===
 document.getElementById('btnLoadSummary')
