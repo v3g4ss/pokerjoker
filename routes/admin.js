@@ -452,7 +452,7 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-// === User Summary mit Pagination + Suche ===
+// === User Summary mit Pagination + Suche (wie Ledger-Kacheln) ===
 router.get('/user-summary', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -467,39 +467,24 @@ router.get('/user-summary', async (req, res) => {
       params.push(q);
     }
 
-    // === Hauptabfrage ===
+    // ---- genau gleiches Prinzip wie in User-/Letzte-Ledger ----
     const { rows } = await pool.query(`
       SELECT 
         u.id,
         u.email,
         u.updated_at AS last_activity,
-        COALESCE(b.total_bought, 0) AS total_bought,
-        COALESCE(b.total_spent, 0)  AS total_spent,
-        COALESCE(l.balance, 0) AS balance
+        COALESCE(SUM(CASE WHEN v.delta > 0 THEN v.delta ELSE 0 END), 0) AS total_bought,
+        COALESCE(SUM(CASE WHEN v.delta < 0 THEN ABS(v.delta) ELSE 0 END), 0) AS total_spent,
+        COALESCE(MAX(v.balance), 0) AS balance
       FROM public.users u
-      LEFT JOIN (
-        SELECT 
-          tl.user_id,
-          SUM(CASE WHEN tl.delta > 0 THEN tl.delta ELSE 0 END) AS total_bought,
-          SUM(CASE WHEN tl.delta < 0 THEN ABS(tl.delta) ELSE 0 END) AS total_spent
-        FROM public.v_token_ledger_detailed tl
-        GROUP BY tl.user_id
-      ) b ON b.user_id = u.id
-      LEFT JOIN (
-        SELECT v.user_id, v.balance AS balance
-        FROM public.v_token_ledger_detailed v
-        WHERE v.id IN (
-          SELECT MAX(id)
-          FROM public.v_token_ledger_detailed
-          GROUP BY user_id
-        )
-      ) l ON l.user_id = u.id
+      LEFT JOIN public.v_token_ledger_detailed v
+        ON v.user_id = u.id
       ${where}
+      GROUP BY u.id, u.email, u.updated_at
       ORDER BY u.id ASC
       LIMIT $1 OFFSET $2
     `, params);
 
-    // === Anzahl Einträge ===
     const { rows: countRows } = await pool.query(
       `SELECT COUNT(*)::int AS total FROM public.users u ${where}`,
       q ? [q] : []
@@ -514,10 +499,11 @@ router.get('/user-summary', async (req, res) => {
     });
 
   } catch (e) {
-    console.error('GET /api/admin/user-summary', e.message || e);
-    res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
+    console.error('GET /api/admin/user-summary', e);
+    res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
   }
 });
+
 
 // Live-Konfig holen
 router.get('/bot/config', async (req, res) => {
