@@ -276,18 +276,24 @@ function renderUserLedger(page = 1) {
   const tb = document.querySelector('#userLedgerTbl tbody');
   if (!tb) return;
 
+  if (!Array.isArray(userLedgerCache) || userLedgerCache.length === 0) {
+    tb.innerHTML = `<tr><td colspan="6" style="text-align:center;">Keine Einträge gefunden</td></tr>`;
+    return;
+  }
+
   const startIdx = (page - 1) * PAGE_SIZE;
   const slice = userLedgerCache.slice(startIdx, startIdx + PAGE_SIZE);
 
   tb.innerHTML = slice.map(r => `
     <tr>
-      <td>${r.id}</td>
-      <td>${r.email || ''}</td>
+      <td>${esc(r.id)}</td>
+      <td>${esc(r.email || '')}</td>
       <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
-      <td>${r.reason || ''}</td>
-      <td>${esc(it.balance ?? it.balance_after ?? '')}</td>
+      <td>${esc(r.reason || '')}</td>
+      <td>${esc(r.balance ?? r.balance_after ?? '')}</td>
       <td>${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
-    </tr>`).join('');
+    </tr>
+  `).join('');
 
   const start = userLedgerTotal ? startIdx + 1 : 0;
   const end = Math.min(page * PAGE_SIZE, userLedgerTotal);
@@ -298,9 +304,13 @@ function renderUserLedger(page = 1) {
   document.getElementById('ledgerNext').disabled = page * PAGE_SIZE >= userLedgerTotal;
 }
 
+// === Event Listener ===
 document.getElementById('btnLoadUserLedger')?.addEventListener('click', async () => {
   const uid = parseInt(document.getElementById('ledgerUserId')?.value, 10);
-  if (!uid) { console.warn('Keine User-ID angegeben.'); return; }
+  if (!uid) {
+    console.warn('Keine User-ID angegeben.');
+    return;
+  }
   currentUid = uid;
   userLedgerPage = 1;
   await fetchUserLedger(uid);
@@ -310,10 +320,10 @@ document.getElementById('btnLoadUserLedger')?.addEventListener('click', async ()
 document.getElementById('ledgerPrev')?.addEventListener('click', () => {
   if (userLedgerPage > 1) renderUserLedger(--userLedgerPage);
 });
+
 document.getElementById('ledgerNext')?.addEventListener('click', () => {
   if (userLedgerPage * PAGE_SIZE < userLedgerTotal) renderUserLedger(++userLedgerPage);
 });
-
 
 // === Letzte 200 Ledger (ebenfalls paginiert, gleiche Logik) ===
 let lastPage = 1;
