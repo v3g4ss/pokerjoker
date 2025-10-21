@@ -404,7 +404,7 @@ router.get('/users/:id/balance', async (req, res) => {
 });
 
 // GET /api/admin/ledger/user/:id
-router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
+router.get('/ledger/user/:id', requireAuth, requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
     const { rows } = await pool.query(`
@@ -414,16 +414,17 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
         u.email,
         v.delta,
         v.reason,
-        v.balance_after,
+        v.balance AS balance_after,   -- 🔥 Korrekt: View-Feld "balance" nutzen
         v.created_at
       FROM public.v_token_ledger_last200 v
       LEFT JOIN public.users u ON u.id = v.user_id
       WHERE v.user_id = $1
       ORDER BY v.id DESC
     `, [id]);
+
     res.json(rows);
   } catch (err) {
-    console.error('❌ Fehler bei /ledger/user/:id:', err.message);
+    console.error('❌ Fehler bei /ledger/user/:id:', err);
     res.status(500).json({ error: err.message });
   }
 });
