@@ -408,18 +408,19 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
     const { rows } = await pool.query(`
-      SELECT l.id,
-       l.user_id,
-       u.email,
-       l.delta,
-       l.reason,
-       l.balance_after AS balance,
-       l.created_at
-    FROM token_ledger l
-    LEFT JOIN users u ON u.id = l.user_id
-    WHERE l.user_id = $1
-    ORDER BY l.id DESC
-
+      SELECT 
+        l.id,
+        l.user_id,
+        u.email,
+        l.delta,
+        l.reason,
+        -- wichtig: richtige Spalte / Alias wie bei v_token_ledger_last200
+        COALESCE(l.balance_after, l.balance, 0) AS balance,
+        l.created_at
+      FROM public.token_ledger l
+      LEFT JOIN public.users u ON u.id = l.user_id
+      WHERE l.user_id = $1
+      ORDER BY l.id DESC
     `, [id]);
     res.json(rows);
   } catch (err) {
@@ -427,7 +428,6 @@ router.get('/ledger/user/:id', requireAdmin, async (req, res) => {
     res.status(500).json({ error: 'DB error' });
   }
 });
-
 
 // GET /api/admin/ledger/last200
 router.get('/ledger/last200', async (_req, res) => {
