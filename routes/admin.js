@@ -457,7 +457,7 @@ router.get('/user-summary', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
-    const q     = (req.query.q || '').trim().toLowerCase();
+    const q     = (req.query.search || req.query.q || '').trim().toLowerCase();
     const off   = (page - 1) * limit;
 
     const where = q ? `WHERE LOWER(email) LIKE '%' || $3 || '%'` : '';
