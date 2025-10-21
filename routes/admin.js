@@ -452,7 +452,7 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-// === User Summary mit Pagination + Suche (mit Balance-Fix) ===
+// === User Summary mit Pagination + Suche ===
 router.get('/user-summary', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -460,7 +460,6 @@ router.get('/user-summary', async (req, res) => {
     const q     = (req.query.search || req.query.q || '').trim().toLowerCase();
     const off   = (page - 1) * limit;
 
-    // --- Suchparameter ---
     let where = '';
     let params = [];
     if (q) {
@@ -470,7 +469,7 @@ router.get('/user-summary', async (req, res) => {
       params = [limit, off];
     }
 
-      const { rows } = await pool.query(`
+    const { rows } = await pool.query(`
       SELECT 
         s.user_id AS id,
         s.email,
@@ -497,7 +496,7 @@ router.get('/user-summary', async (req, res) => {
 
     res.json({ ok: true, items: rows, page, limit, total: cnt[0].total });
   } catch (e) {
-    console.error('GET /api/admin/user-summary', e.message || e);
+    console.error('GET /api/admin/user-summary', e);
     res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
   }
 });
