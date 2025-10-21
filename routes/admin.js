@@ -452,7 +452,7 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-    // === User Summary mit Pagination + Suche (Balance korrekt aus v_token_ledger_detailed) ===
+    // === // === User Summary mit Pagination + Suche (Balance aus v_token_ledger_detailed) ===
 router.get('/user-summary', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -461,13 +461,14 @@ router.get('/user-summary', async (req, res) => {
     const off   = (page - 1) * limit;
 
     let where = '';
-    const params = [limit, off];
+    let params = [limit, off];
+
     if (q) {
       where = `WHERE LOWER(u.email) LIKE '%' || $3 || '%'`;
-      params.push(q);
+      params = [limit, off, q];
     }
 
-    const { rows } = await pool.query(`
+    const sql = `
       SELECT 
         u.id,
         u.email,
@@ -482,24 +483,22 @@ router.get('/user-summary', async (req, res) => {
       GROUP BY u.id, u.email, u.updated_at
       ORDER BY u.id ASC
       LIMIT $1 OFFSET $2
-    `, params);
+    `;
 
-    const { rows: countRows } = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM public.users u ${where}`,
-      q ? [q] : []
-    );
+    const { rows } = await pool.query(sql, params);
 
-    res.json({
-      ok: true,
-      items: rows,
-      page,
-      limit,
-      total: countRows[0].total
-    });
+    const countSql = `
+      SELECT COUNT(*)::int AS total
+      FROM public.users u
+      ${q ? "WHERE LOWER(u.email) LIKE '%' || $1 || '%'" : ''}
+    `;
 
+    const { rows: countRows } = await pool.query(countSql, q ? [q] : []);
+
+    res.json({ ok: true, items: rows, page, limit, total: countRows[0].total });
   } catch (e) {
     console.error('GET /api/admin/user-summary', e);
-    res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
+    res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
   }
 });
 
