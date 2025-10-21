@@ -452,7 +452,7 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-    // === User Summary mit Balance aus v_token_ledger_detailed ===
+   // === User Summary mit Pagination + Suche ===
 router.get('/user-summary', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -460,37 +460,49 @@ router.get('/user-summary', async (req, res) => {
     const q     = (req.query.search || req.query.q || '').trim().toLowerCase();
     const off   = (page - 1) * limit;
 
-    let where = '';
-    let params = [limit, off];
-    if (q) {
-      where = `WHERE LOWER(u.email) LIKE '%' || $3 || '%'`;
-      params = [limit, off, q];
-    }
+    let sql, params;
 
-    const sql = `
-      SELECT 
-        u.id,
-        u.email,
-        u.updated_at AS last_activity,
-        COALESCE(SUM(CASE WHEN v.delta > 0 THEN v.delta ELSE 0 END), 0) AS total_bought,
-        COALESCE(SUM(CASE WHEN v.delta < 0 THEN ABS(v.delta) ELSE 0 END), 0) AS total_spent,
-        COALESCE(MAX(v.balance_after), 0) AS balance
-      FROM public.users u
-      LEFT JOIN public.v_token_ledger_detailed v
-        ON v.user_id = u.id
-      ${where}
-      GROUP BY u.id, u.email, u.updated_at
-      ORDER BY u.id ASC
-      LIMIT $1 OFFSET $2;
-    `;
+    if (q) {
+      sql = `
+        SELECT 
+          u.id,
+          u.email,
+          u.updated_at AS last_activity,
+          COALESCE(SUM(CASE WHEN v.delta > 0 THEN v.delta ELSE 0 END), 0) AS total_bought,
+          COALESCE(SUM(CASE WHEN v.delta < 0 THEN ABS(v.delta) ELSE 0 END), 0) AS total_spent,
+          COALESCE(MAX(v.balance_after), 0) AS balance
+        FROM public.users u
+        LEFT JOIN public.v_token_ledger_detailed v ON v.user_id = u.id
+        WHERE LOWER(u.email) LIKE '%' || $3 || '%'
+        GROUP BY u.id, u.email, u.updated_at
+        ORDER BY u.id ASC
+        LIMIT $1 OFFSET $2;
+      `;
+      params = [limit, off, q];
+    } else {
+      sql = `
+        SELECT 
+          u.id,
+          u.email,
+          u.updated_at AS last_activity,
+          COALESCE(SUM(CASE WHEN v.delta > 0 THEN v.delta ELSE 0 END), 0) AS total_bought,
+          COALESCE(SUM(CASE WHEN v.delta < 0 THEN ABS(v.delta) ELSE 0 END), 0) AS total_spent,
+          COALESCE(MAX(v.balance_after), 0) AS balance
+        FROM public.users u
+        LEFT JOIN public.v_token_ledger_detailed v ON v.user_id = u.id
+        GROUP BY u.id, u.email, u.updated_at
+        ORDER BY u.id ASC
+        LIMIT $1 OFFSET $2;
+      `;
+      params = [limit, off];
+    }
 
     const { rows } = await pool.query(sql, params);
 
-    const countSql = `
-      SELECT COUNT(*)::int AS total
-      FROM public.users u
-      ${q ? "WHERE LOWER(u.email) LIKE '%' || $1 || '%'" : ''}
-    `;
+    const countSql = q
+      ? `SELECT COUNT(*)::int AS total FROM public.users u WHERE LOWER(u.email) LIKE '%' || $1 || '%'`
+      : `SELECT COUNT(*)::int AS total FROM public.users`;
+
     const { rows: countRows } = await pool.query(countSql, q ? [q] : []);
 
     res.json({
@@ -500,6 +512,7 @@ router.get('/user-summary', async (req, res) => {
       limit,
       total: countRows[0].total
     });
+
   } catch (e) {
     console.error('❌ GET /api/admin/user-summary ERROR:', e.message);
     res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
