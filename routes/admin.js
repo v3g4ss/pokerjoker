@@ -452,7 +452,7 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-/// === User Summary mit Pagination + Suche ===
+// === User Summary mit Pagination + Suche ===
 router.get('/user-summary', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -460,39 +460,50 @@ router.get('/user-summary', async (req, res) => {
     const q     = (req.query.q || '').trim().toLowerCase();
     const off   = (page - 1) * limit;
 
-    const where = q ? `WHERE LOWER(s.email) LIKE '%' || $3 || '%'` : '';
     const params = [limit, off];
-    if (q) params.push(q);
+    let where = '';
+    if (q) {
+      where = `WHERE LOWER(u.email) LIKE '%' || $3 || '%'`;
+      params.push(q);
+    }
 
     const { rows } = await pool.query(`
       SELECT 
         u.id,
         u.email,
-        u.last_update AS last_activity,
-        u.gekauft AS total_bought,
-        u.ausgegeben AS total_spent,
+        u.updated_at AS last_activity,
+        COALESCE(b.total_bought, 0) AS total_bought,
+        COALESCE(b.total_spent, 0)  AS total_spent,
         COALESCE(l.balance_after, 0) AS balance
-      FROM users u
+      FROM public.users u
+      LEFT JOIN (
+        SELECT 
+          tl.user_id,
+          SUM(CASE WHEN tl.delta > 0 THEN tl.delta ELSE 0 END) AS total_bought,
+          SUM(CASE WHEN tl.delta < 0 THEN ABS(tl.delta) ELSE 0 END) AS total_spent
+        FROM public.v_token_ledger_detailed tl
+        GROUP BY tl.user_id
+      ) b ON b.user_id = u.id
       LEFT JOIN (
         SELECT user_id, balance_after
-        FROM v_token_ledger_detailed
+        FROM public.v_token_ledger_detailed
         WHERE id IN (
           SELECT MAX(id)
-          FROM v_token_ledger_detailed
+          FROM public.v_token_ledger_detailed
           GROUP BY user_id
         )
       ) l ON l.user_id = u.id
-      ${q ? `WHERE LOWER(u.email) LIKE '%' || $3 || '%'` : ''}
+      ${where}
       ORDER BY u.id ASC
       LIMIT $1 OFFSET $2
-    `, q ? [limit, off, q] : [limit, off]);
+    `, params);
 
-    const { rows: cnt } = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM v_token_user_summary s ${where}`,
+    const totalRes = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM public.users u ${where}`,
       q ? [q] : []
     );
 
-    res.json({ ok: true, items: rows, page, limit, total: cnt[0].total });
+    res.json({ ok: true, items: rows, page, limit, total: totalRes.rows[0].total });
   } catch (e) {
     console.error('GET /api/admin/user-summary', e);
     res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
