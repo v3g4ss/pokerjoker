@@ -137,38 +137,61 @@ async function sendMailOptional(app, { to, subject, text }) {
 router.get('/stats', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT
-        -- Kunden = alle ohne Admin
-        (SELECT COUNT(*) FROM public.users WHERE NOT is_admin) AS customers,
-        -- Admins separat
-        (SELECT COUNT(*) FROM public.users WHERE is_admin) AS admins,
+  SELECT
+    -- Alle aktiven (nicht gelöscht)
+    (SELECT COUNT(*) 
+       FROM public.users 
+      WHERE deleted_at IS NULL
+    ) AS total_users,
 
-        -- E-Mails
-        (SELECT COUNT(*) FROM public.messages) AS messages_total,
-        (SELECT COUNT(*) FROM public.messages m
-           WHERE NOT EXISTS (
-             SELECT 1 FROM public.message_replies r
-             WHERE r.message_id = m.id
-           )
-        ) AS messages_new,
+    -- Aktive Admins (nicht gelöscht)
+    (SELECT COUNT(*) 
+       FROM public.users 
+      WHERE is_admin = true 
+        AND deleted_at IS NULL
+    ) AS admins,
 
-        -- Tokens gekauft (Buy-Ins)
-        COALESCE((
-          SELECT SUM(delta)::bigint
-          FROM public.token_ledger
-          WHERE delta > 0 AND LOWER(COALESCE(reason, '')) LIKE 'buy%'
-        ), 0) AS purchased,
+    -- Kunden = Alle aktiven - Admins
+    (
+      (SELECT COUNT(*) 
+         FROM public.users 
+        WHERE deleted_at IS NULL)
+      -
+      (SELECT COUNT(*) 
+         FROM public.users 
+        WHERE is_admin = true 
+          AND deleted_at IS NULL)
+    ) AS customers,
 
-        -- Admin vergeben (+)
-        COALESCE((
-          SELECT SUM(delta)::bigint
-          FROM public.token_ledger
-          WHERE delta > 0 AND LOWER(COALESCE(reason, '')) LIKE 'admin%'
-        ), 0) AS admin_granted,
+    -- E-Mails
+    (SELECT COUNT(*) FROM public.messages) AS messages_total,
+    (SELECT COUNT(*) FROM public.messages m
+       WHERE NOT EXISTS (
+         SELECT 1 FROM public.message_replies r
+          WHERE r.message_id = m.id
+       )
+    ) AS messages_new,
 
-        -- Tokens im Umlauf (Summe user.tokens)
-        (SELECT COALESCE(SUM(tokens),0) FROM public.users) AS tokens_in_circulation
-    `);
+    -- Tokens gekauft (Buy-Ins)
+    COALESCE((
+      SELECT SUM(delta)::bigint
+      FROM public.token_ledger
+      WHERE delta > 0 AND LOWER(COALESCE(reason, '')) LIKE 'buy%'
+    ), 0) AS purchased,
+
+    -- Tokens von Admin vergeben
+    COALESCE((
+      SELECT SUM(delta)::bigint
+      FROM public.token_ledger
+      WHERE delta > 0 AND LOWER(COALESCE(reason, '')) LIKE 'admin%'
+    ), 0) AS admin_granted,
+
+    -- Tokens im Umlauf (Summe)
+    (SELECT COALESCE(SUM(tokens),0)
+       FROM public.users
+      WHERE deleted_at IS NULL
+    ) AS tokens_in_circulation
+`);
 
     res.json({ ok: true, ...rows[0] });
   } catch (e) {
