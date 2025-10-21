@@ -452,7 +452,7 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-    // === // === User Summary mit Pagination + Suche (Balance aus v_token_ledger_detailed) ===
+    // === User Summary mit Balance aus v_token_ledger_detailed ===
 router.get('/user-summary', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -462,7 +462,6 @@ router.get('/user-summary', async (req, res) => {
 
     let where = '';
     let params = [limit, off];
-
     if (q) {
       where = `WHERE LOWER(u.email) LIKE '%' || $3 || '%'`;
       params = [limit, off, q];
@@ -482,7 +481,7 @@ router.get('/user-summary', async (req, res) => {
       ${where}
       GROUP BY u.id, u.email, u.updated_at
       ORDER BY u.id ASC
-      LIMIT $1 OFFSET $2
+      LIMIT $1 OFFSET $2;
     `;
 
     const { rows } = await pool.query(sql, params);
@@ -492,12 +491,17 @@ router.get('/user-summary', async (req, res) => {
       FROM public.users u
       ${q ? "WHERE LOWER(u.email) LIKE '%' || $1 || '%'" : ''}
     `;
-
     const { rows: countRows } = await pool.query(countSql, q ? [q] : []);
 
-    res.json({ ok: true, items: rows, page, limit, total: countRows[0].total });
+    res.json({
+      ok: true,
+      items: rows,
+      page,
+      limit,
+      total: countRows[0].total
+    });
   } catch (e) {
-    console.error('GET /api/admin/user-summary', e);
+    console.error('❌ GET /api/admin/user-summary ERROR:', e.message);
     res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
   }
 });
