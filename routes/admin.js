@@ -452,7 +452,7 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-// === User Summary mit Pagination + Suche ===
+// === User Summary mit Pagination + Suche (mit Balance-Fix) ===
 router.get('/user-summary', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -460,6 +460,7 @@ router.get('/user-summary', async (req, res) => {
     const q     = (req.query.search || req.query.q || '').trim().toLowerCase();
     const off   = (page - 1) * limit;
 
+    // --- Suchparameter ---
     let where = '';
     let params = [];
     if (q) {
@@ -469,6 +470,7 @@ router.get('/user-summary', async (req, res) => {
       params = [limit, off];
     }
 
+    // --- Query ---
     const { rows } = await pool.query(`
       SELECT 
         s.user_id AS id,
@@ -476,15 +478,15 @@ router.get('/user-summary', async (req, res) => {
         s.last_update AS last_activity,
         s.gekauft AS total_bought,
         s.ausgegeben AS total_spent,
-        COALESCE(d.balance_after, 0) AS tokens
+        COALESCE(ld.balance, 0) AS tokens
       FROM v_token_user_summary s
-      LEFT JOIN (
-        SELECT user_id, balance_after
-        FROM v_token_ledger_detailed
-        WHERE id IN (
-          SELECT MAX(id) FROM v_token_ledger_detailed GROUP BY user_id
-        )
-      ) d ON d.user_id = s.user_id
+      LEFT JOIN LATERAL (
+        SELECT balance
+        FROM v_token_ledger_detailed l
+        WHERE l.user_id = s.user_id
+        ORDER BY id DESC
+        LIMIT 1
+      ) ld ON true
       ${where}
       ORDER BY s.user_id ASC
       LIMIT ${q ? '$2' : '$1'} OFFSET ${q ? '$3' : '$2'}
@@ -495,10 +497,10 @@ router.get('/user-summary', async (req, res) => {
       q ? [q] : []
     );
 
-    res.json({ ok:true, items: rows, page, limit, total: cnt[0].total });
+    res.json({ ok: true, items: rows, page, limit, total: cnt[0].total });
   } catch (e) {
-    console.error('GET /api/admin/user-summary', e);
-    res.status(500).json({ ok:false, message:'Fehler beim Laden der Summary' });
+    console.error('GET /api/admin/user-summary', e.message || e);
+    res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
   }
 });
 
