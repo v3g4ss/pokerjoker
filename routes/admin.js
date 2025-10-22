@@ -452,67 +452,33 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-   // === User Summary mit Pagination + Suche ===
+   // GET /api/admin/user-summary
 router.get('/user-summary', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
-    const q     = (req.query.search || req.query.q || '').trim().toLowerCase();
     const off   = (page - 1) * limit;
+    const q     = (req.query.search || '').trim();
 
-    let sql, params;
+    const base =
+      `SELECT user_id AS id, email, status, last_update,
+              gekauft, ausgegeben, admin, aktuell
+         FROM public.v_token_user_summary`;
 
-    if (q) {
-      sql = `
-        SELECT 
-          user_id AS id,
-          email,
-          last_update AS last_activity,
-          gekauft,
-          ausgegeben,
-          admin,
-          aktuell
-        FROM public.v_token_user_summary
-        WHERE LOWER(email) LIKE '%' || $3 || '%'
-        ORDER BY user_id ASC
-        LIMIT $1 OFFSET $2;
-      `;
-      params = [limit, off, q];
-    } else {
-      sql = `
-        SELECT 
-          user_id AS id,
-          email,
-          last_update AS last_activity,
-          gekauft,
-          ausgegeben,
-          admin,
-          aktuell
-        FROM public.v_token_user_summary
-        ORDER BY user_id ASC
-        LIMIT $1 OFFSET $2;
-      `;
-      params = [limit, off];
-    }
+    const where = q ? ` WHERE LOWER(email) LIKE LOWER('%' || $3 || '%')` : '';
+    const sql   = `${base}${where} ORDER BY last_update DESC, email ASC LIMIT $1 OFFSET $2`;
 
+    const params = q ? [limit, off, q] : [limit, off];
     const { rows } = await pool.query(sql, params);
 
     const countSql = q
-      ? `SELECT COUNT(*)::int AS total FROM public.v_token_user_summary WHERE LOWER(email) LIKE '%' || $1 || '%'`
+      ? `SELECT COUNT(*)::int AS total FROM public.v_token_user_summary WHERE LOWER(email) LIKE LOWER('%' || $1 || '%')`
       : `SELECT COUNT(*)::int AS total FROM public.v_token_user_summary`;
+    const { rows: cnt } = await pool.query(countSql, q ? [q] : []);
 
-    const { rows: countRows } = await pool.query(countSql, q ? [q] : []);
-
-    res.json({
-      ok: true,
-      items: rows,
-      page,
-      limit,
-      total: countRows[0].total
-    });
-
+    res.json({ ok: true, items: rows, page, limit, total: cnt[0].total });
   } catch (e) {
-    console.error('❌ GET /api/admin/user-summary ERROR:', e.message);
+    console.error('❌ /admin/user-summary error:', e);
     res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
   }
 });
