@@ -260,6 +260,15 @@ const esc = (s) => (s ?? '').toString()
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+  function fmt(iso) {
+  if (!iso) return '-';
+  try {
+    return new Date(iso).toLocaleString('de-DE');
+  } catch {
+    return '-';
+  }
+}
+
 // === User Ledger (mit Pagination) ===
 let userLedgerPage = 1;
 let userLedgerTotal = 0;
