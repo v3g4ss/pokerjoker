@@ -417,19 +417,29 @@ async function loadUserSummary(page = 1, search = '') {
     if (!tbody) return;
 
     tbody.innerHTML = rows.length
-      ? rows.map(r => `
-        <tr>
-            <td>${r.id}</td>
-            <td>${esc(r.email)}</td>
-            <td>${fmt(r.last_activity)}</td>
-            <td>${r.gekauft ?? 0}</td>
-            <td>${r.ausgegeben ?? 0}</td>
-            <td>${r.admin ?? 0}</td>
-            <td>${r.aktuell ?? 0}</td>
-          </td>
-        </tr>
-      `).join('')
-      : `<tr><td colspan="7" class="text-center text-gray">Keine Einträge gefunden</td></tr>`;
+      ? rows.map(r => {
+          const label = r.status || 'aktiv';
+          const color =
+            label === 'gelöscht'
+              ? 'color: #ff5555;'
+              : label === 'gesperrt'
+              ? 'color: #ffaa00;'
+              : 'color: #55ff55;';
+
+          return `
+            <tr>
+              <td>${r.id}</td>
+              <td>${esc(r.email)}</td>
+              <td>${fmt(r.last_update || r.last_activity)}</td>
+              <td style="${color}">${label}</td>
+              <td>${r.gekauft ?? 0}</td>
+              <td>${r.ausgegeben ?? 0}</td>
+              <td>${r.admin ?? 0}</td>
+              <td>${r.aktuell ?? 0}</td>
+            </tr>
+          `;
+        }).join('')
+      : `<tr><td colspan="8" class="text-center text-gray">Keine Einträge gefunden</td></tr>`;
 
     if (typeof renderPager === 'function') {
       renderPager('summaryInfo', page, summaryLimit, summaryTotal);
