@@ -12,10 +12,12 @@ async function getTokens(userId) {
   return rows[0] || { balance: 0, purchased: 0 };
 }
 
-// Buy-in: +amount, purchased = letzte Kaufmenge (nicht Summe)
-async function buyTokens(userId, amount) {
+// Buy-in oder Admin-Adjust: +amount, purchased = letzte Kaufmenge (nicht Summe)
+async function buyTokens(userId, amount, reason = 'buy') {
   const amt = Math.trunc(Number(amount));
   if (!Number.isFinite(amt) || amt <= 0) throw new Error('buyTokens: amount > 0');
+
+  const reasonText = (reason || '').toString().trim() || 'buy';
 
   const client = await pool.connect();
   try {
@@ -34,14 +36,15 @@ async function buyTokens(userId, amount) {
 
     await client.query(
       `INSERT INTO public.token_ledger (user_id, delta, reason)
-       VALUES ($1, $2, 'buy')`,
-      [userId, amt]
+       VALUES ($1, $2, $3)`,
+      [userId, amt, reasonText]
     );
 
     await client.query('COMMIT');
     return u;
   } catch (e) {
-    await client.query('ROLLBACK'); throw e;
+    await client.query('ROLLBACK');
+    throw e;
   } finally {
     client.release();
   }
