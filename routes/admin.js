@@ -465,33 +465,31 @@ router.get('/user-summary', async (req, res) => {
     if (q) {
       sql = `
         SELECT 
-          u.id,
-          u.email,
-          u.updated_at AS last_activity,
-          COALESCE(SUM(CASE WHEN v.delta > 0 THEN v.delta ELSE 0 END), 0) AS total_bought,
-          COALESCE(SUM(CASE WHEN v.delta < 0 THEN ABS(v.delta) ELSE 0 END), 0) AS total_spent,
-          COALESCE(MAX(v.balance), 0) AS balance
-        FROM public.users u
-        LEFT JOIN public.v_token_ledger_detailed v ON v.user_id = u.id
-        WHERE LOWER(u.email) LIKE '%' || $3 || '%'
-        GROUP BY u.id, u.email, u.updated_at
-        ORDER BY u.id ASC
+          user_id AS id,
+          email,
+          last_update AS last_activity,
+          gekauft,
+          ausgegeben,
+          admin,
+          aktuell
+        FROM public.v_token_user_summary
+        WHERE LOWER(email) LIKE '%' || $3 || '%'
+        ORDER BY user_id ASC
         LIMIT $1 OFFSET $2;
       `;
       params = [limit, off, q];
     } else {
       sql = `
         SELECT 
-          u.id,
-          u.email,
-          u.updated_at AS last_activity,
-          COALESCE(SUM(CASE WHEN v.delta > 0 THEN v.delta ELSE 0 END), 0) AS total_bought,
-          COALESCE(SUM(CASE WHEN v.delta < 0 THEN ABS(v.delta) ELSE 0 END), 0) AS total_spent,
-          COALESCE(MAX(v.balance), 0) AS balance
-        FROM public.users u
-        LEFT JOIN public.v_token_ledger_detailed v ON v.user_id = u.id
-        GROUP BY u.id, u.email, u.updated_at
-        ORDER BY u.id ASC
+          user_id AS id,
+          email,
+          last_update AS last_activity,
+          gekauft,
+          ausgegeben,
+          admin,
+          aktuell
+        FROM public.v_token_user_summary
+        ORDER BY user_id ASC
         LIMIT $1 OFFSET $2;
       `;
       params = [limit, off];
@@ -500,8 +498,8 @@ router.get('/user-summary', async (req, res) => {
     const { rows } = await pool.query(sql, params);
 
     const countSql = q
-      ? `SELECT COUNT(*)::int AS total FROM public.users u WHERE LOWER(u.email) LIKE '%' || $1 || '%'`
-      : `SELECT COUNT(*)::int AS total FROM public.users`;
+      ? `SELECT COUNT(*)::int AS total FROM public.v_token_user_summary WHERE LOWER(email) LIKE '%' || $1 || '%'`
+      : `SELECT COUNT(*)::int AS total FROM public.v_token_user_summary`;
 
     const { rows: countRows } = await pool.query(countSql, q ? [q] : []);
 
@@ -518,7 +516,6 @@ router.get('/user-summary', async (req, res) => {
     res.status(500).json({ ok: false, message: 'Fehler beim Laden der Summary' });
   }
 });
-
 
 // Live-Konfig holen
 router.get('/bot/config', async (req, res) => {
