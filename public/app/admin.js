@@ -409,14 +409,13 @@ async function loadUserSummary(page = 1, search = '') {
     tbody.innerHTML = rows.length
       ? rows.map(r => `
         <tr>
-          <td>${r.id ?? ''}</td>
-          <td>${r.email || ''}</td>
-          <td>${r.last_activity ? new Date(r.last_activity).toLocaleString() : '-'}</td>
-          <td>${r.total_bought ?? 0}</td>
-          <td>${r.total_spent ?? 0}</td>
-          <td>${r.admin_tokens ?? 0}</td>
-          <td class="${(r.tokens ?? 0) > 0 ? 'text-green' : 'text-red'}">
-            ${r.tokens ?? 0}
+            <td>${r.id}</td>
+            <td>${esc(r.email)}</td>
+            <td>${fmt(r.last_activity)}</td>
+            <td>${r.gekauft ?? 0}</td>
+            <td>${r.ausgegeben ?? 0}</td>
+            <td>${r.admin ?? 0}</td>
+            <td>${r.aktuell ?? 0}</td>
           </td>
         </tr>
       `).join('')
