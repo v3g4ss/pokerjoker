@@ -390,47 +390,50 @@ document.addEventListener('DOMContentLoaded', () => {
   loadLastLedger();
 
   // === User-Summary modernisiert + Pagination ===
-  let summaryPage = 1;
-  let summaryTotal = 0;
-  const summaryLimit = 10;
+let summaryPage = 1;
+let summaryTotal = 0;
+const summaryLimit = 10;
 
-  async function loadUserSummary(page = 1, search = '') {
-    try {
-      const q = new URLSearchParams({ page, limit: summaryLimit });
-      if (search) q.set('search', search);
+async function loadUserSummary(page = 1, search = '') {
+  try {
+    const q = new URLSearchParams({ page, limit: summaryLimit });
+    if (search) q.set('search', search);
 
-      const data = await api(`/admin/user-summary?${q.toString()}`);
-      const rows = Array.isArray(data.items) ? data.items : [];
-      summaryTotal = data.total || rows.length;
+    const data = await api(`/admin/user-summary?${q.toString()}`);
+    const rows = Array.isArray(data.items) ? data.items : [];
+    summaryTotal = data.total || rows.length;
 
-      const tbody = document.querySelector('#userSummaryTbl tbody');
-      if (!tbody) return;
+    const tbody = document.querySelector('#userSummaryTbl tbody');
+    if (!tbody) return;
 
-      tbody.innerHTML = rows.length
-        ? rows.map(r => `
-          <tr>
-            <td>${r.id ?? ''}</td>
-            <td>${r.email || ''}</td>
-            <td>${r.last_activity ? new Date(r.last_activity).toLocaleString() : '-'}</td>
-            <td>${r.total_bought ?? 0}</td>
-            <td>${r.total_spent ?? 0}</td>
-            <td class="${r.balance  > 0 ? 'text-green' : 'text-red'}">${r.tokens ?? 0}</td>
-          </tr>
-        `).join('')
-        : `<tr><td colspan="6" class="text-center text-gray">Keine Einträge gefunden</td></tr>`;
+    tbody.innerHTML = rows.length
+      ? rows.map(r => `
+        <tr>
+          <td>${r.id ?? ''}</td>
+          <td>${r.email || ''}</td>
+          <td>${r.last_activity ? new Date(r.last_activity).toLocaleString() : '-'}</td>
+          <td>${r.total_bought ?? 0}</td>
+          <td>${r.total_spent ?? 0}</td>
+          <td>${r.admin_tokens ?? 0}</td>
+          <td class="${(r.tokens ?? 0) > 0 ? 'text-green' : 'text-red'}">
+            ${r.tokens ?? 0}
+          </td>
+        </tr>
+      `).join('')
+      : `<tr><td colspan="7" class="text-center text-gray">Keine Einträge gefunden</td></tr>`;
 
-      if (typeof renderPager === 'function') {
-        renderPager('summaryInfo', page, summaryLimit, summaryTotal);
-      }
-
-      document.getElementById('summaryPrev').disabled = page <= 1;
-      document.getElementById('summaryNext').disabled = page * summaryLimit >= summaryTotal;
-
-    } catch (e) {
-      console.error('Fehler bei loadUserSummary:', e);
-      document.getElementById('summaryInfo').textContent = 'Fehler beim Laden';
+    if (typeof renderPager === 'function') {
+      renderPager('summaryInfo', page, summaryLimit, summaryTotal);
     }
+
+    document.getElementById('summaryPrev').disabled = page <= 1;
+    document.getElementById('summaryNext').disabled = page * summaryLimit >= summaryTotal;
+
+  } catch (e) {
+    console.error('Fehler bei loadUserSummary:', e);
+    document.getElementById('summaryInfo').textContent = 'Fehler beim Laden';
   }
+}
 
   // === Events ===
   document.getElementById('summaryPrev')?.addEventListener('click', () => {
