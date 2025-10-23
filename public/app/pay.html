@@ -98,25 +98,29 @@
     });
 
     document.getElementById('buyPaypal')?.addEventListener('click', async () => {
-      try {
-        const res = await fetch('/api/pay/paypal/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-        });
-
-        const data = await res.json();
-        const approveLink = data.links?.find(l => l.rel === 'approve')?.href;
-
-        if (approveLink) {
-          window.location.href = approveLink;
-        } else {
-          alert('PayPal-Checkout fehlgeschlagen!');
-        }
-      } catch (err) {
-        alert('PayPal Fehler: ' + err.message);
-      }
+  try {
+    const res = await fetch('/api/pay/paypal/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
     });
+
+    const data = await res.json();
+
+    // 🟩 Alte Variante:
+    // const approveLink = data.links?.find(l => l.rel === 'approve')?.href;
+
+    // 🟢 Neue Variante:
+    if (data?.approve_url) {
+      window.location.href = data.approve_url;
+    } else {
+      alert('PayPal-Checkout fehlgeschlagen!');
+      console.error('PayPal Response:', data);
+    }
+  } catch (err) {
+    alert('PayPal Fehler: ' + err.message);
+  }
+});
   </script>
 
   <!-- Utils & Auth -->
