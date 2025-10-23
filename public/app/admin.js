@@ -125,13 +125,16 @@ document.querySelector('#usersTbl tbody')?.addEventListener('click', async (e) =
     return;
   }
 
-  // Lock/Unlock
-  if (b.classList.contains('lock')) {
-    const locked = b.dataset.lock === '1';
-    await api(`/admin/users/${id}/lock`, { method:'POST', body: JSON.stringify({ locked }) });
-    await loadUsers();
-    return;
-  }
+  // Lock/Unlock (Backend erwartet /admin/users/lock)
+if (b.classList.contains('lock')) {
+  const lock = b.dataset.lock === '1';
+  await api('/admin/users/lock', {
+    method: 'POST',
+    body: JSON.stringify({ id, lock })
+  });
+  await loadUsers();
+  return;
+}
 
   // Soft Delete
   if (b.classList.contains('del')) {
