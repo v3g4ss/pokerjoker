@@ -318,16 +318,32 @@ router.post('/users', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/admin/users/:id/lock
-router.post('/users/:id/lock', requireAuth, requireAdmin, async (req, res) => {
+// === User sperren / entsperren (mit locked_at) ===
+router.post('/users/lock', async (req, res) => {
   try {
-    const id = Number.parseInt(req.params.id, 10);
-    const locked = !!req.body?.locked;
-    await pool.query('UPDATE public.users SET is_locked=$1 WHERE id=$2', [locked, id]);
-    res.json({ ok:true });
+    const { id, lock } = req.body;
+
+    // Zeitpunkt nur setzen, wenn tatsächlich gesperrt wird
+    if (lock) {
+      await pool.query(
+        `UPDATE users 
+         SET is_locked = true, locked_at = NOW(), updated_at = NOW()
+         WHERE id = $1`,
+        [id]
+      );
+    } else {
+      await pool.query(
+        `UPDATE users 
+         SET is_locked = false, locked_at = NULL, updated_at = NOW()
+         WHERE id = $1`,
+        [id]
+      );
+    }
+
+    res.json({ ok: true });
   } catch (e) {
-    console.error('POST /api/admin/users/:id/lock', e);
-    res.status(500).json({ ok:false, message:'lock_failed' });
+    console.error('❌ /admin/users/lock error:', e);
+    res.status(500).json({ ok: false, message: 'Fehler beim Sperren/Entsperren' });
   }
 });
 
