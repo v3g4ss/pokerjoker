@@ -460,13 +460,22 @@ router.get('/user-summary', async (req, res) => {
     const off   = (page - 1) * limit;
     const q     = (req.query.search || '').trim();
 
-    const base =
-      `SELECT user_id AS id, email, status, last_update,
-              gekauft, ausgegeben, admin, aktuell
-         FROM public.v_token_user_summary`;
+    // Neue View mit Alias für Kompatibilität zum Frontend
+    const base = `
+      SELECT 
+        user_id AS id, 
+        email, 
+        status, 
+        ereigniszeit AS last_update,  -- <-- ersetzt last_update
+        gekauft, 
+        ausgegeben, 
+        admin, 
+        aktuell
+      FROM public.v_token_user_summary
+    `;
 
     const where = q ? ` WHERE LOWER(email) LIKE LOWER('%' || $3 || '%')` : '';
-    const sql   = `${base}${where} ORDER BY last_update DESC, email ASC LIMIT $1 OFFSET $2`;
+    const sql   = `${base}${where} ORDER BY ereigniszeit DESC, email ASC LIMIT $1 OFFSET $2`;
 
     const params = q ? [limit, off, q] : [limit, off];
     const { rows } = await pool.query(sql, params);
