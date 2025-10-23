@@ -527,3 +527,41 @@ div[style*="userSearch"] {
   align-items: center;
   margin: 12px 0;
 }
+
+/* === Ledger Tabellen-Ausrichtung fix === */
+#userLedgerTbl,
+#lastLedgerTbl {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+#userLedgerTbl th,
+#lastLedgerTbl th,
+#userLedgerTbl td,
+#lastLedgerTbl td {
+  text-align: center;
+  padding: 6px 10px;
+  vertical-align: middle;
+}
+
+#userLedgerTbl th:nth-child(1),
+#lastLedgerTbl th:nth-child(1),
+#userLedgerTbl td:nth-child(1),
+#lastLedgerTbl td:nth-child(1) {
+  text-align: right;
+}
+
+#userLedgerTbl th:nth-child(2),
+#lastLedgerTbl th:nth-child(2),
+#userLedgerTbl td:nth-child(2),
+#lastLedgerTbl td:nth-child(2) {
+  text-align: left;
+}
+
+#userLedgerTbl th:last-child,
+#lastLedgerTbl th:last-child,
+#userLedgerTbl td:last-child,
+#lastLedgerTbl td:last-child {
+  text-align: right;
+}
