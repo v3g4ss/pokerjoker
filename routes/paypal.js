@@ -9,7 +9,11 @@ const requireAuth = require('../middleware/requireAuth');
 function client() {
   const envName = String(process.env.PAYPAL_ENV || 'sandbox').toLowerCase();
   const clientId = process.env.PAYPAL_CLIENT_ID;
-  const clientSecret = process.env.PAYPAL_SECRET; // ✅ korrekt!
+  const clientSecret = process.env.PAYPAL_SECRET;
+
+  if (!clientId || !clientSecret) {
+    console.error('[PayPal] Fehlende Credentials! Bitte PAYPAL_CLIENT_ID & PAYPAL_SECRET setzen.');
+  }
 
   const env =
     envName === 'live'
@@ -19,7 +23,7 @@ function client() {
   return new paypal.core.PayPalHttpClient(env);
 }
 
-// === Token-Paket (du kannst später weitere hinzufügen) ===
+// === Token-Paket ===
 const PRODUCT = {
   name: 'Poker Joker – 10.000 Tokens',
   token_delta: 10000,
@@ -27,7 +31,7 @@ const PRODUCT = {
   currency: 'EUR',
 };
 
-// === 1) Bestellung erstellen ===
+// === Bestellung erstellen ===
 router.post('/paypal/create', requireAuth, async (req, res) => {
   try {
     const base = process.env.APP_BASE_URL || 'http://localhost:5000';
@@ -54,24 +58,29 @@ router.post('/paypal/create', requireAuth, async (req, res) => {
       },
     });
 
-    // PayPal-Order anlegen
     const order = await client().execute(request);
-    const approve = order.result?.links?.find(l => l.rel === 'approve')?.href || null;
+
+    console.log('[PayPal ORDER RESULT]', JSON.stringify(order.result, null, 2)); // 🧩 Debug-Ausgabe!
+
+    const approve = order.result?.links?.find(l => l.rel === 'approve')?.href;
 
     if (!approve) {
-      console.error('[PayPal] Keine approve_url gefunden:', order.result);
-      return res.status(500).json({ ok: false, error: 'approve_url_missing' });
+      console.error('[PayPal] Keine approve_url gefunden oder API-Antwort fehlerhaft!');
+      return res.status(500).json({
+        ok: false,
+        error: 'approve_url_missing',
+        details: order.result || null
+      });
     }
 
-    // ✅ Erfolg
     res.json({ ok: true, approve_url: approve });
   } catch (err) {
     console.error('[PayPal create error]', err.message || err);
-    res.status(500).json({ ok: false, error: 'paypal_create_failed' });
+    res.status(500).json({ ok: false, error: 'paypal_create_failed', details: err.message });
   }
 });
 
-// === 2) Zahlung erfassen (Capture) ===
+// === Zahlung erfassen (Capture) ===
 router.get('/paypal/capture', async (req, res) => {
   const orderId = String(req.query?.token || '');
   if (!orderId) return res.status(400).send('Invalid capture params');
@@ -87,7 +96,6 @@ router.get('/paypal/capture', async (req, res) => {
       return res.redirect('/app/pay-cancel.html');
     }
 
-    // === custom_id wieder auslesen ===
     let meta = null;
     try {
       meta =
@@ -103,10 +111,9 @@ router.get('/paypal/capture', async (req, res) => {
     const delta  = Number(meta?.tokens  || PRODUCT.token_delta || 0);
     if (!(userId > 0 && delta > 0)) {
       console.warn('[PayPal] Capture ohne valide Meta:', meta);
-      return res.redirect('/app/pay-success.html'); // Zahlung war ok, aber keine Gutschrift
+      return res.redirect('/app/pay-success.html');
     }
 
-    // === Doppelte Gutschrift verhindern ===
     const reason = `buy_paypal:${orderId}`;
     const exists = await pool.query(
       'SELECT 1 FROM public.token_ledger WHERE user_id=$1 AND reason=$2 LIMIT 1',
@@ -117,12 +124,12 @@ router.get('/paypal/capture', async (req, res) => {
       return res.redirect('/app/pay-success.html');
     }
 
-    // === Ledger-Eintrag + Token-Gutschrift ===
     await pool.query(
       `INSERT INTO public.token_ledger (user_id, delta, reason, created_at)
        VALUES ($1, $2, $3, now())`,
       [userId, delta, reason]
     );
+
     await pool.query(
       `UPDATE public.users
          SET tokens = tokens + $1,
