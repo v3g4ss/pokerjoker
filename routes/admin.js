@@ -462,17 +462,17 @@ router.get('/user-summary', async (req, res) => {
 
     // Neue View mit Alias für Kompatibilität zum Frontend
     const base = `
-      SELECT 
-        user_id AS id, 
-        email, 
-        status, 
-        ereigniszeit AS last_update,  -- <-- ersetzt last_update
-        gekauft, 
-        ausgegeben, 
-        admin, 
-        aktuell
-      FROM public.v_token_user_summary
-    `;
+  SELECT 
+    COALESCE(user_id, 0) AS id,
+    COALESCE(email, '') AS email,
+    COALESCE(status, '') AS status,
+    COALESCE(ereigniszeit, NOW()) AS last_update,
+    COALESCE(gekauft, 0) AS gekauft,
+    COALESCE(ausgegeben, 0) AS ausgegeben,
+    COALESCE(admin, 0) AS admin,
+    COALESCE(aktuell, 0) AS aktuell
+  FROM public.v_token_user_summary
+`;
 
     const where = q ? ` WHERE LOWER(email) LIKE LOWER('%' || $3 || '%')` : '';
     const sql   = `${base}${where} ORDER BY ereigniszeit DESC, email ASC LIMIT $1 OFFSET $2`;
