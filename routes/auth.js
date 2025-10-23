@@ -120,8 +120,8 @@ router.post('/signup', async (req, res) => {
     const verifyToken = crypto.randomBytes(32).toString('hex');
 
     const ins = await pool.query(`
-      INSERT INTO public.users (email, email_original, password, is_admin, tokens, purchased, created_at, email_verified, verify_token)
-      VALUES ($1, $1, $2, false, 0, 0, NOW(), false, $3)
+      INSERT INTO public.users (email, password, is_admin, tokens, purchased, created_at, email_verified, verify_token)
+      VALUES ($1, $2, false, 0, 0, NOW(), false, $3)
       RETURNING id
     `, [emailRaw, hash, verifyToken]);
 
