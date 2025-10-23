@@ -528,40 +528,56 @@ div[style*="userSearch"] {
   margin: 12px 0;
 }
 
-/* === Ledger Tabellen-Ausrichtung fix === */
-#userLedgerTbl,
-#lastLedgerTbl {
+/* === Ledger Tabellen-Header Korrektur === */
+#userLedgerTbl, #lastLedgerTbl {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
-#userLedgerTbl th,
-#lastLedgerTbl th,
-#userLedgerTbl td,
-#lastLedgerTbl td {
+#userLedgerTbl th, #lastLedgerTbl th,
+#userLedgerTbl td, #lastLedgerTbl td {
   text-align: center;
   padding: 6px 10px;
   vertical-align: middle;
 }
 
 #userLedgerTbl th:nth-child(1),
-#lastLedgerTbl th:nth-child(1),
-#userLedgerTbl td:nth-child(1),
-#lastLedgerTbl td:nth-child(1) {
+#userLedgerTbl td:nth-child(1) {
+  width: 10%;
   text-align: right;
 }
 
 #userLedgerTbl th:nth-child(2),
-#lastLedgerTbl th:nth-child(2),
-#userLedgerTbl td:nth-child(2),
-#lastLedgerTbl td:nth-child(2) {
+#userLedgerTbl td:nth-child(2) {
+  width: 40%;
   text-align: left;
 }
 
-#userLedgerTbl th:last-child,
-#lastLedgerTbl th:last-child,
-#userLedgerTbl td:last-child,
-#lastLedgerTbl td:last-child {
+#userLedgerTbl th:nth-child(3),
+#userLedgerTbl td:nth-child(3) {
+  width: 20%;
   text-align: right;
+}
+
+#userLedgerTbl th:nth-child(4),
+#userLedgerTbl td:nth-child(4) {
+  width: 30%;
+  text-align: right;
+}
+
+/* === User-Summary Statusfarben === */
+#userSummaryTbl td.status-aktiv {
+  color: #4caf50; /* grün */
+  font-weight: 600;
+}
+
+#userSummaryTbl td.status-gesperrt {
+  color: #ffb300; /* orange */
+  font-weight: 600;
+}
+
+#userSummaryTbl td.status-gelöscht {
+  color: #999;
+  text-decoration: line-through;
 }
