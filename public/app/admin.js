@@ -296,8 +296,7 @@ function renderUserLedger(page = 1) {
  tb.innerHTML = slice.map(r => `
   <tr>
     <td>${esc(r.id)}</td>
-    <td>${esc(r.email || '')}</td>
-    <td>${esc(r.status || '')}</td>     
+    <td>${esc(r.email || '')}</td>        
     <td class="${r.delta >= 0 ? 'text-green' : 'text-red'}">${r.delta}</td>
     <td>${esc(r.reason || '')}</td>
     <td>${esc(r.balance_after ?? r.balance ?? '')}</td>
