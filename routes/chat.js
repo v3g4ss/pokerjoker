@@ -128,8 +128,8 @@ async function handleChat(req, res) {
 
     // === Token-Verbrauch berechnen ===
     const punctCount = (answer.match(PUNCT_REGEX) || []).length;
-    const punctRate = Number(process.env.PUNCT_RATE || 1);
-    const maxUsed   = Number(process.env.MAX_USEDTOKENS_PER_MSG || 9999);
+    const punctRate = Number(cfg?.punct_rate ?? process.env.PUNCT_RATE ?? 1);
+    const maxUsed   = Number(cfg?.max_usedtokens_per_msg ?? process.env.MAX_USEDTOKENS_PER_MSG ?? 9999);
 
     const variableCost = punctCount * punctRate;
     const cappedUsed   = Math.min(usedTokens, maxUsed);
@@ -184,7 +184,7 @@ try {
       balance: newBal,
       purchased,
       sources,
-      meta: { usedTokens, punctCount, punctRate: PUNCT_RATE, charged: toCharge }
+      meta: { usedTokens, punctCount, punctRate, charged: toCharge }
     });
   } catch (err) {
     console.error('CHAT ERROR:', err);

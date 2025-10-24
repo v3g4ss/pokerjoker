@@ -6,7 +6,10 @@ let cache = null, cacheTS = 0;
 async function getBotConfig() {
   const now = Date.now();
   if (cache && now - cacheTS < 10_000) return cache; // 10s Cache
-  const { rows } = await pool.query('SELECT * FROM bot_settings WHERE id=1');
+ const { rows } = await pool.query(`
+  SELECT system_prompt, temperature, model, knowledge_mode, punct_rate, max_usedtokens_per_msg
+  FROM bot_settings WHERE id=1
+`);
   cache = rows[0];
   cacheTS = now;
   return cache;
