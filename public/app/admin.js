@@ -537,8 +537,9 @@ document.getElementById('btnSearchSummary')
 btnSave?.addEventListener('click', async () => {
   st && (st.textContent = 'Speichere…');
 
-  const punctEl = document.getElementById('admPunct');
-  const maxTokEl = document.getElementById('admMaxTokens');
+  const punctEl = document.getElementById('punctRate');
+  const maxTokEl = document.getElementById('maxUsedTokens');
+
   const punct = parseFloat(punctEl?.value || '1');
   const maxTok = parseInt(maxTokEl?.value || '1000', 10);
 
