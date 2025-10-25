@@ -533,7 +533,7 @@ document.getElementById('btnSearchSummary')
     }
   } catch {}
 
-  // Speichern (LIVE)
+// Speichern (LIVE)
 btnSave?.addEventListener('click', async () => {
   st && (st.textContent = 'Speichere…');
 
@@ -563,7 +563,6 @@ btnSave?.addEventListener('click', async () => {
     st && (st.textContent = e.message || 'Fehler');
   }
 });
-
 
   // Testen (zeigt IMMER etwas an – auch bei Server/Model-Fehlern)
   btnTest?.addEventListener('click', async ()=>{
