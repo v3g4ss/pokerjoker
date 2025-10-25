@@ -1,4 +1,3 @@
-// routes/admin-prompt.js
 const express = require('express');
 const router = express.Router();
 
@@ -43,12 +42,14 @@ router.put('/prompt', requireAuth, requireAdmin, async (req, res) => {
     system_prompt,
     temperature,
     model,
+    knowledge_mode,
     punct_rate,
     max_usedtokens_per_msg
   } = req.body || {};
 
   const t      = Number.isFinite(temperature) ? Number(temperature) : 0.3;
   const m      = (model || 'gpt-4o-mini').toString();
+  const km     = knowledge_mode || 'LLM_ONLY';
   const pr     = Number.isFinite(punct_rate) ? Number(punct_rate) : 1;
   const maxTok = Number.isFinite(max_usedtokens_per_msg) ? Number(max_usedtokens_per_msg) : 1000;
 
@@ -59,35 +60,36 @@ router.put('/prompt', requireAuth, requireAdmin, async (req, res) => {
     if (cur.rowCount) {
       await pool.query(`
         INSERT INTO bot_settings_history
-          (system_prompt, temperature, model, version, updated_by, updated_at, knowledge_mode, punct_rate, max_usedtokens_per_msg)
-        VALUES ($1,$2,$3,$4,$5,now(),$6,$7,$8)
+          (system_prompt, temperature, model, knowledge_mode, punct_rate, max_usedtokens_per_msg, version, updated_by, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
       `, [
         cur.rows[0].system_prompt ?? '',
         cur.rows[0].temperature ?? 0.3,
         cur.rows[0].model ?? 'gpt-4o-mini',
-        cur.rows[0].version ?? 0,
-        req.user?.id || null,
         cur.rows[0].knowledge_mode ?? 'LLM_ONLY',
         cur.rows[0].punct_rate ?? 1,
-        cur.rows[0].max_usedtokens_per_msg ?? 1000
+        cur.rows[0].max_usedtokens_per_msg ?? 1000,
+        cur.rows[0].version ?? 0,
+        req.user?.id || null
       ]);
     }
 
     await pool.query(`
       INSERT INTO bot_settings 
-        (id, system_prompt, temperature, model, punct_rate, max_usedtokens_per_msg, version, updated_by, updated_at)
+        (id, system_prompt, temperature, model, knowledge_mode, punct_rate, max_usedtokens_per_msg, version, updated_by, updated_at)
       VALUES 
-        (1, $1, $2, $3, $4, $5, 1, $6, now())
+        (1, $1, $2, $3, $4, $5, $6, 1, $7, now())
       ON CONFLICT (id) DO UPDATE SET
         system_prompt = EXCLUDED.system_prompt,
         temperature   = EXCLUDED.temperature,
         model         = EXCLUDED.model,
+        knowledge_mode = EXCLUDED.knowledge_mode,
         punct_rate    = EXCLUDED.punct_rate,
         max_usedtokens_per_msg = EXCLUDED.max_usedtokens_per_msg,
         version       = bot_settings.version + 1,
         updated_by    = EXCLUDED.updated_by,
         updated_at    = now()
-    `, [system_prompt || '', t, m, pr, maxTok, req.user?.id || null]);
+    `, [system_prompt || '', t, m, km, pr, maxTok, req.user?.id || null]);
 
     await pool.query('COMMIT');
     res.json({ ok: true });
@@ -103,14 +105,11 @@ router.post('/prompt/test', requireAuth, requireAdmin, async (req, res) => {
   console.log('HIT /api/admin/prompt/test (ECHO + optional OpenAI)');
   console.log('Prompt-Test Body:', req.body);
 
-
   const body = req.body || {};
-
-const system_prompt = body.system_prompt ?? '';
-const input         = body.input ?? 'Ping';
-const model         = body.model ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
-const temperature   = body.temperature ?? 0.3;
-
+  const system_prompt = body.system_prompt ?? '';
+  const input         = body.input ?? 'Ping';
+  const model         = body.model ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
+  const temperature   = body.temperature ?? 0.3;
 
   const preview = system_prompt.toString().replace(/\s+/g, ' ').slice(0, 160);
   let output = `[SERVER OK]\nPrompt: "${preview}${system_prompt.length > 160 ? '…' : ''}"\nAntwort auf "${input}": Server antwortet.`;
