@@ -543,12 +543,13 @@ btnSave?.addEventListener('click', async () => {
   const maxTok = parseInt(maxTokEl?.value || '1000', 10);
 
   const body = {
-    system_prompt: txt.value.trim(),
-    temperature: parseFloat(temp.value || '0.3'),
-    model: mdl.value,
-    punct_rate: punct,
-    max_usedtokens_per_msg: maxTok
-  };
+  system_prompt: txt.value.trim(),
+  temperature: parseFloat(temp.value || '0.3'),
+  model: mdl.value,
+  knowledge_mode: mode,
+  punct_rate: parseFloat(document.getElementById('admPunct')?.value || '1'),
+  max_usedtokens_per_msg: parseInt(document.getElementById('admMaxTokens')?.value || '1000', 10),
+};
 
   try {
     const r = await fetch('/api/admin/prompt', {
