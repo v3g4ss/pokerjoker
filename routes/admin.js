@@ -515,16 +515,35 @@ router.get('/bot/config', async (req, res) => {
 });
 
 // Live-Konfig setzen (erzieht den Bot!)
+// === Live-Konfig setzen (zieht sofort am Bot) ===
 router.post('/bot/config', async (req, res) => {
-  const { system_prompt='', temperature=0.3, model='gpt-4o-mini' } = req.body || {};
-  if (!system_prompt.trim()) return res.status(400).json({ ok:false, message:'Prompt fehlt' });
-  await setBotConfig({
-    system_prompt: String(system_prompt).slice(0, 20000),
-    temperature: Number(temperature),
-    model: String(model)
-  }, req.user?.id || null);
-  const cfg = await getBotConfig();
-  res.json({ ok:true, cfg });
+  const {
+    system_prompt = '',
+    temperature = 0.3,
+    model = 'gpt-4o-mini',
+    punct_rate = 1,
+    max_usedtokens_per_msg = 1000
+  } = req.body || {};
+
+  if (!system_prompt.trim())
+    return res.status(400).json({ ok: false, message: 'Prompt fehlt' });
+
+  try {
+    await setBotConfig({
+      system_prompt: String(system_prompt).slice(0, 20000),
+      temperature: Number(temperature),
+      model: String(model),
+      punct_rate: Number(punct_rate),
+      max_usedtokens_per_msg: Number(max_usedtokens_per_msg),
+      updated_by: req.user?.id || null
+    });
+
+    const cfg = await getBotConfig();
+    res.json({ ok: true, cfg });
+  } catch (err) {
+    console.error('Fehler beim Live-Speichern:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // Optional: Rollback auf Version X

@@ -534,21 +534,36 @@ document.getElementById('btnSearchSummary')
   } catch {}
 
   // Speichern (LIVE)
-  btnSave?.addEventListener('click', async ()=>{
-    st && (st.textContent = 'Speichere…');
-    const body = { system_prompt: txt.value, temperature: parseFloat(temp.value||'0.3'), model: mdl.value };
-    try {
-      const r = await fetch('/api/admin/prompt', {
-        method:'PUT', credentials:'include',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(body)
-      });
-      const d = await r.json().catch(()=>({}));
-      st && (st.textContent = d.ok ? 'Gespeichert' : (d.error||'Fehler'));
-    } catch (e) {
-      st && (st.textContent = e.message || 'Fehler');
-    }
-  });
+btnSave?.addEventListener('click', async () => {
+  st && (st.textContent = 'Speichere…');
+
+  const punctEl = document.getElementById('admPunct');
+  const maxTokEl = document.getElementById('admMaxTokens');
+  const punct = parseFloat(punctEl?.value || '1');
+  const maxTok = parseInt(maxTokEl?.value || '1000', 10);
+
+  const body = {
+    system_prompt: txt.value.trim(),
+    temperature: parseFloat(temp.value || '0.3'),
+    model: mdl.value,
+    punct_rate: punct,
+    max_usedtokens_per_msg: maxTok
+  };
+
+  try {
+    const r = await fetch('/api/admin/prompt', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json().catch(() => ({}));
+    st && (st.textContent = d.ok ? 'Gespeichert' : (d.error || 'Fehler'));
+  } catch (e) {
+    st && (st.textContent = e.message || 'Fehler');
+  }
+});
+
 
   // Testen (zeigt IMMER etwas an – auch bei Server/Model-Fehlern)
   btnTest?.addEventListener('click', async ()=>{
