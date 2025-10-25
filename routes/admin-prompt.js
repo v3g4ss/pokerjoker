@@ -50,8 +50,8 @@ router.put('/prompt', requireAuth, requireAdmin, async (req, res) => {
   const t      = Number.isFinite(temperature) ? Number(temperature) : 0.3;
   const m      = (model || 'gpt-4o-mini').toString();
   const km     = knowledge_mode || 'LLM_ONLY';
-  const pr     = Number.isFinite(punct_rate) ? Number(punct_rate) : 1;
-  const maxTok = Number.isFinite(max_usedtokens_per_msg) ? Number(max_usedtokens_per_msg) : 1000;
+  const pr     = !isNaN(parseFloat(punct_rate)) ? parseFloat(punct_rate) : 1;
+  const maxTok = !isNaN(parseInt(max_usedtokens_per_msg)) ? parseInt(max_usedtokens_per_msg) : 1000;
 
   try {
     await pool.query('BEGIN');
