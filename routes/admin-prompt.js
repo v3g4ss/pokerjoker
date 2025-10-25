@@ -38,6 +38,7 @@ router.get('/prompt', requireAuth, requireAdmin, async (_req, res) => {
 
 // --- PUT /api/admin/prompt ---
 router.put('/prompt', requireAuth, requireAdmin, async (req, res) => {
+  console.log('[DEBUG PUT /api/admin/prompt]', req.body);
   const {
     system_prompt,
     temperature,
@@ -99,6 +100,7 @@ router.put('/prompt', requireAuth, requireAdmin, async (req, res) => {
     res.status(500).json({ ok: false, error: 'Speichern fehlgeschlagen' });
   }
 });
+
 
 // --- POST /api/admin/prompt/test ---
 router.post('/prompt/test', requireAuth, requireAdmin, async (req, res) => {
