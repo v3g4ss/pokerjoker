@@ -525,6 +525,14 @@ document.getElementById('btnSearchSummary')
   try {
     const r = await fetch('/api/admin/prompt', { credentials:'include' });
     const d = await r.json();
+    // Schreibe die DB-Werte direkt ins Dashboard
+    if (d.punct_rate !== null) {
+      document.getElementById('punctRate').value = d.punct_rate;
+    }
+    if (d.max_usedtokens_per_msg !== null) {
+      document.getElementById('maxUsedTokens').value = d.max_usedtokens_per_msg;
+    }
+
     if (d && d.system_prompt !== undefined) {
       if (typeof d.system_prompt === 'string') txt.value = d.system_prompt;
       if (d.temperature != null) temp.value = d.temperature;
