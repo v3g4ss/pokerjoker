@@ -82,12 +82,12 @@ app.use(
       const token = jwt.sign(payload, process.env.JWT_SECRET, {
         expiresIn: '7d',
       });
-      res.cookie('session', token, {
+            res.cookie('session', token, {
         httpOnly: true,
-        sameSite: 'None',   // wichtig für HTTPS + Cross-Origin
-        secure: true,       // Render läuft über HTTPS
+        sameSite: 'None',  // <--- MUSS None sein
+        secure: true,      // <--- Render = HTTPS
         path: '/',
-        maxAge: 1000 * 60 * 60 * 24 * 7,
+        maxAge: 1000 * 60 * 60 * 24 * 7
       });
     };
     next();
