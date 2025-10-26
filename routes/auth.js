@@ -53,14 +53,16 @@ async function ensureTables() {
 
 function setSessionCookie(res, payload) {
   const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
+
   res.cookie('session', token, {
     httpOnly: true,
-    sameSite: 'None',   // war 'lax' – MUSS 'None' sein für HTTPS-Fetches
-    secure: true,       // Render läuft über HTTPS
+    sameSite: 'None',    // MUSS so sein, sonst wird Cookie bei HTTPS geblockt
+    secure: true,        // Render = HTTPS → Pflicht!
     path: '/',
     maxAge: 1000 * 60 * 60 * 24 * 7
   });
 }
+
 
 // ============================================================
 // LOGIN

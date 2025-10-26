@@ -28,7 +28,10 @@ app.post(
 
 // --- Middleware ---
 app.use(cookieParser());
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin: ['https://poker-joker.tech', 'https://www.poker-joker.tech'],
+  credentials: true
+}));
 app.use(express.json({ limit: '1mb' }));
 
 app.use((req, res, next) => {
@@ -81,8 +84,8 @@ app.use(
       });
       res.cookie('session', token, {
         httpOnly: true,
-        sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'None',   // wichtig für HTTPS + Cross-Origin
+        secure: true,       // Render läuft über HTTPS
         path: '/',
         maxAge: 1000 * 60 * 60 * 24 * 7,
       });
@@ -91,6 +94,7 @@ app.use(
   },
   authRouter
 );
+
 app.use('/api/password', passwordRouter);
 
 // --- Static Files ---
