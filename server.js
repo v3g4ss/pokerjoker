@@ -66,7 +66,7 @@ const tokensRoutes = require('./routes/tokens');
 const authRouter = require('./routes/auth');
 const passwordRouter = require('./routes/password');
 
-app.use('/api', chatRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/api', menuRoutes);
 app.use('/api', messagesRoutes);
 app.use('/api/tokens', tokensRoutes);
