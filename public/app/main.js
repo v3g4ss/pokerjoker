@@ -158,22 +158,6 @@ function appendMessage(sender, text, save = true) {
   msg.innerHTML = `<strong>${who}:</strong><br>${text}`;
   chatBox.appendChild(msg);  
 }
-// Chatverlauf aus Datenbank laden
-async function loadChatFromDatabase() {
-  try {
-    const res = await fetch('/api/chat/history', { credentials: 'include' });
-    const data = await res.json();
-    if (!data.ok || !Array.isArray(data.history)) return;
-
-    if (!chatBox?.hasChildNodes()) {
-  for (const msg of data.history) {
-    appendMessage(msg.role, msg.message, false);
-  }
-}
-  } catch (err) {
-    console.error('Fehler beim Laden der Chat-Historie:', err);
-  }
-}
 
 // === Tipp-Erkennung / Hotkey-GUARD (robust) ===
 const isTypingTarget = (el) => {
@@ -263,15 +247,13 @@ async function refreshTokenUI() {
   } catch {}
 }
 
-// === Init / Hooks ===
-document.addEventListener('DOMContentLoaded', refreshTokenUI);
-console.log('[DEBUG] DOM ready → Token UI wird geladen');
+// === Nach erfolgreichem Buy-in (Stripe/PayPal) – Success-Seite leitet zurück
+if (location.pathname.endsWith('/app/pay-success.html')) {
+  setTimeout(() => { window.location.href = '/app'; }, 800);
+}
 
-
-// === Init / Hooks ===
+// === DOM Ready – EINMAL ==================================
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('[DEBUG] DOM ready + Token UI wird geladen');
-
   try {
     const r = await fetch('/api/auth/me', { credentials: 'include' });
     if (r.status === 401) console.warn('Nicht eingeloggt');
@@ -280,68 +262,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Tokens sofort laden
   await refreshTokenUI();
 
-  // 🔄 Chatverlauf aus Datenbank laden
-  await loadChatFromDatabase();
+  // Chatverlauf laden
+  await loadChatHistory();
 
-  // Chat-Eingabe binden
+  // Eingabe-Events binden
   if (typeof chatBox !== 'undefined' && chatBox && input && button) {
     input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
       }
     });
-
-    input.addEventListener('keyup',   (e) => e.stopPropagation());
-    input.addEventListener('keypress',(e) => e.stopPropagation());
-    button.addEventListener('click',  sendMessage);
-  }
-});
-
-// === Nach erfolgreichem Buy-in (Stripe/PayPal) – Success-Seite leitet zurück
-if (location.pathname.endsWith('/app/pay-success.html')) {
-  setTimeout(() => { window.location.href = '/app'; }, 800);
-}
-
-// beim Laden:
-document.addEventListener('DOMContentLoaded', refreshTokenUI);
-
-// === Nach erfolgreichem Buy-in (Stripe/PayPal) – Success-Seite leitet zurück
-if (location.pathname.endsWith('/app/pay-success.html')) {
-  setTimeout(() => { window.location.href = '/app'; }, 800);
-}
-
-// === DOM Ready – EINMAL
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    const r = await fetch('/api/auth/me', { credentials: 'include' });
-    if (r.status === 401) console.warn('Nicht eingeloggt');
-  } catch {}
-
-  document.addEventListener('DOMContentLoaded', async () => {
-  // ...
-  await loadChatHistory(); // <-- Chatverlauf anzeigen
-});
-
-  // Tokens sofort laden
-  await refreshTokenUI();
-
-  // Falls du die Checkout-Handler NICHT schon woanders bindest, hier aktivieren:
-  // document.getElementById('buyinBtn')?.addEventListener('click', startStripeCheckout);
-  // document.getElementById('buyinBtnPaypal')?.addEventListener('click', startPaypalCheckout);
-
-  // UI initialisieren
-  await refreshTokenUI();
-  await loadChatFromDatabase();
-
-
-  // Chat-Eingabe binden (Variablen müssen vorher existieren)
-  if (typeof chatBox !== 'undefined' && chatBox && input && button) {
-    input.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-    });
-    input.addEventListener('keyup',    (e) => e.stopPropagation());
+    input.addEventListener('keyup', (e) => e.stopPropagation());
     input.addEventListener('keypress', (e) => e.stopPropagation());
     button.addEventListener('click', sendMessage);
   }
@@ -354,8 +287,21 @@ async function loadChatHistory() {
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
+    // 👇 vor dem Einfügen leeren, um Duplikate zu vermeiden
+    if (chatBox) chatBox.innerHTML = '';
+
     for (const msg of data.history) {
       appendMessage(msg.role, msg.message);
+    }
+
+    // 👇 Scroll immer ans Ende
+    setTimeout(() => {
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }, 100);
+
+    // 👇 Begrüßung nur wenn keine Historie
+    if (data.history.length === 0) {
+      appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
     }
   } catch (err) {
     console.error('Fehler beim Laden des Chatverlaufs:', err);
