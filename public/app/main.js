@@ -468,6 +468,9 @@ for (const msg of data.history) {
 // Senden
 // ---------------------------
 function sendMessage() {
+  if (window.chatSending) return; // schon am Antworten → abbrechen
+window.chatSending = true;
+
   if (sendingInProgress) return;
   const message = (input?.value || '').trim();
   if (!message) return;
@@ -527,6 +530,8 @@ try {
   });
 } catch (err) {
   console.warn('Bot-Message save failed:', err);
+
+  window.chatSending = false;
 }
 
     // NEU: nach erfolgreicher Antwort neu einlesen (zieht auch -50 ab)
