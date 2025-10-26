@@ -287,52 +287,37 @@ async function loadChatHistory() {
     if (!data.ok || !Array.isArray(data.history)) return;
 
     // Nur leeren, wenn noch kein Chat sichtbar ist
-if (chatBox && chatBox.children.length === 0) {
-  chatBox.innerHTML = '';
-}
+    if (chatBox && chatBox.children.length === 0) {
+      chatBox.innerHTML = '';
+    }
 
-const existing = Array.from(chatBox.children)
-  .map(c => c.textContent)
-  .join('\n');
+    // Bereits sichtbare Inhalte erfassen
+    const existing = Array.from(chatBox.children)
+      .map(c => c.textContent)
+      .join('\n');
 
-for (const msg of data.history) {
-  if (existing.includes(msg.message)) continue;
-  appendMessage(msg.role, msg.message);
-}
+    // Duplikate verhindern: (a) innerhalb der Antwort, (b) ggü. DOM
+    const seen = new Set();
+    for (const msg of data.history) {
+      const key = msg.role + '::' + msg.message;
+      if (seen.has(key)) continue;          // (a)
+      seen.add(key);
+      if (existing.includes(msg.message)) continue; // (b)
+      appendMessage(msg.role, msg.message);
+    }
 
-if (existing.includes(msg.message)) continue; // schon vorhanden → überspringen
-appendMessage(msg.role, msg.message);
+    // Scroll ans Ende
+    setTimeout(() => {
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }, 100);
 
-    // Doppelte Nachrichten verhindern
-const seen = new Set();
-for (const msg of data.history) {
-  const key = msg.role + '::' + msg.message;
-  if (seen.has(key)) continue; // doppelt → überspringen
-  seen.add(key);
-  appendMessage(msg.role, msg.message);
-}
-
-
-    // Nur leeren, wenn noch kein Chat sichtbar ist
-if (chatBox && chatBox.children.length === 0) {
-  chatBox.innerHTML = '';
-}
-
-// Existierende Inhalte erfassen
-const existing = Array.from(chatBox.children)
-  .map(c => c.textContent)
-  .join('\n');
-
-// Doppelte Nachrichten verhindern
-const seen = new Set();
-
-for (const msg of data.history) {
-  const key = msg.role + '::' + msg.message;
-  if (seen.has(key)) continue; // Schon in diesem Durchlauf vorhanden
-  seen.add(key);
-
-  if (existing.includes(msg.message)) continue; // Schon sichtbar
-  appendMessage(msg.role, msg.message);
+    // Begrüßung nur wenn keine Historie
+    if (data.history.length === 0) {
+      appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
+    }
+  } catch (err) {
+    console.error('Fehler beim Laden des Chatverlaufs:', err);
+  }
 }
 
 // === Mic & Hotkeys (robust, Hold-X + Button) =======================
