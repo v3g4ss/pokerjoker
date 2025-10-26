@@ -488,9 +488,9 @@ function sendMessage() {
 
   sendToBot(message)
     .catch(err => console.error('Fehler beim Senden:', err))
-    .finally(() => {     
-    });
-}
+    .finally(() => { window.chatSending = false; });
+    }
+    
 window.sendMessage = sendMessage;
 
 
@@ -524,21 +524,23 @@ async function sendToBot(message) {
     }
 
     const data = await res.json().catch(() => ({}));
-    appendMessage('bot', data.reply || '…');
 
-    // === Bot-Antwort sofort in DB sichern ===
-try {
-  await fetch('/api/chat/save', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: 'bot', message: data.reply || '…' })
-  });
-} catch (err) {
-  console.warn('Bot-Message save failed:', err);
+    try {
+      // === Bot-Antwort sofort in DB sichern ===
+      await fetch('/api/chat/save', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'bot', message: data.reply || '…' })
+      });
 
-  window.chatSending = false;
-}
+      // === Erst anzeigen, wenn DB-Speicherung durch ist ===
+      appendMessage('bot', data.reply || '…');
+    } catch (err) {
+      console.warn('Bot-Message save failed:', err);
+    } finally {
+      window.chatSending = false;   // Flag immer freigeben – auch bei Fehlern
+    }
 
     // NEU: nach erfolgreicher Antwort neu einlesen (zieht auch -50 ab)
     try { await refreshTokenUI(); } catch {}
