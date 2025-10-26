@@ -55,8 +55,8 @@ function setSessionCookie(res, payload) {
   const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
   res.cookie('session', token, {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'None',        // wichtig: None, damit Cross-Site erlaubt ist
+    secure: true,            // wichtig: Render = HTTPS
     path: '/',
     maxAge: 1000 * 60 * 60 * 24 * 7
   });
