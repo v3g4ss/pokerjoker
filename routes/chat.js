@@ -192,9 +192,8 @@ try {
   }
 }
 
-// Chat-Verlauf abrufen
 // === Chat-Verlauf abrufen ===
-router.get('/chat/history', requireAuth, async (req, res) => {
+router.get('/history', requireAuth, async (req, res) => {
   try {
     const uid = req.user?.id || req.session?.user?.id;
     if (!uid) return res.status(401).json({ ok: false, error: 'Nicht eingeloggt' });
@@ -214,28 +213,11 @@ router.get('/chat/history', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/chat/history
-router.get('/chat/history', requireAuth, async (req, res) => {
-  try {
-    const uid = req.user?.id || req.session?.user?.id;
-    if (!uid) return res.status(401).json({ ok: false, error: 'Nicht eingeloggt' });
+// === Chat senden ===
+router.post('/', requireAuth, handleChat);
 
-    const { rows } = await pool.query(`
-      SELECT role, message, created_at
-      FROM chat_history
-      WHERE user_id = $1
-      ORDER BY created_at ASC
-      LIMIT 100
-    `, [uid]);
-
-    res.json({ ok: true, history: rows });
-  } catch (err) {
-    console.error('Fehler beim Laden der Chat-Historie:', err.message);
-    res.status(500).json({ ok: false, error: 'Interner Fehler beim Laden der Chat-Historie' });
-  }
-});
-
-router.post('/chat', requireAuth, handleChat);
+// (optional Alias für Rückwärtskompatibilität)
 router.post('/pokerjoker', requireAuth, handleChat);
 
 module.exports = router;
+
