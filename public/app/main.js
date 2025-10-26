@@ -290,9 +290,15 @@ async function loadChatHistory() {
     // 👇 vor dem Einfügen leeren, um Duplikate zu vermeiden
     if (chatBox) chatBox.innerHTML = '';
 
-    for (const msg of data.history) {
-      appendMessage(msg.role, msg.message);
-    }
+    // Doppelte Nachrichten verhindern
+const seen = new Set();
+for (const msg of data.history) {
+  const key = msg.role + '::' + msg.message;
+  if (seen.has(key)) continue; // doppelt → überspringen
+  seen.add(key);
+  appendMessage(msg.role, msg.message);
+}
+
 
     // 👇 Scroll immer ans Ende
     setTimeout(() => {
@@ -510,6 +516,18 @@ async function sendToBot(message) {
 
     const data = await res.json().catch(() => ({}));
     appendMessage('bot', data.reply || '…');
+
+    // === Bot-Antwort sofort in DB sichern ===
+try {
+  await fetch('/api/chat/save', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'bot', message: data.reply || '…' })
+  });
+} catch (err) {
+  console.warn('Bot-Message save failed:', err);
+}
 
     // NEU: nach erfolgreicher Antwort neu einlesen (zieht auch -50 ab)
     try { await refreshTokenUI(); } catch {}
