@@ -16,7 +16,6 @@ const clearBtn  = document.getElementById('clearChatButton');
 const speechStatus = document.getElementById('speechStatus');
 
 const STORAGE_KEY = 'pokerjoker_chatlog';
-let sendingInProgress = false;
 
 // === Logout ===
 if (logoutBtn) {
@@ -468,25 +467,32 @@ for (const msg of data.history) {
 // Senden
 // ---------------------------
 function sendMessage() {
-  if (window.chatSending) return; // schon am Antworten → abbrechen
-window.chatSending = true;
+  if (window.chatSending) return;           // Blockieren, falls bereits am Antworten
+  window.chatSending = true;                // Sperre aktiv
 
-  if (sendingInProgress) return;
   const message = (input?.value || '').trim();
-  if (!message) return;
-
-  // NEU: auf state.balance prüfen
-  if (state.balance < MIN_BAL) {
-    appendMessage('bot', '🔋 Zu wenig Tokens. Bitte Buy-in!');
+  if (!message) {
+    window.chatSending = false;
     return;
   }
 
-  sendingInProgress = true;
+  // Zu wenig Tokens?
+  if (state.balance < MIN_BAL) {
+    appendMessage('bot', '🔋 Zu wenig Tokens. Bitte Buy-in!');
+    window.chatSending = false;
+    return;
+  }
+
   appendMessage('user', message);
   if (input) input.value = '';
-  sendToBot(message).finally(() => { sendingInProgress = false; });
+
+  sendToBot(message)
+    .catch(err => console.error('Fehler beim Senden:', err))
+    .finally(() => {     
+    });
 }
 window.sendMessage = sendMessage;
+
 
 async function sendToBot(message) {
   try {
