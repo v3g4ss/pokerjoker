@@ -259,7 +259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch {}
 
   // Tokens sofort laden
-  await refreshTokenUI();
+  // await refreshTokenUI();
 
   // Chatverlauf laden
   await loadChatHistory();
@@ -286,8 +286,22 @@ async function loadChatHistory() {
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    // 👇 vor dem Einfügen leeren, um Duplikate zu vermeiden
-    if (chatBox) chatBox.innerHTML = '';
+    // Nur leeren, wenn noch kein Chat sichtbar ist
+if (chatBox && chatBox.children.length === 0) {
+  chatBox.innerHTML = '';
+}
+
+const existing = Array.from(chatBox.children)
+  .map(c => c.textContent)
+  .join('\n');
+
+for (const msg of data.history) {
+  if (existing.includes(msg.message)) continue;
+  appendMessage(msg.role, msg.message);
+}
+
+if (existing.includes(msg.message)) continue; // schon vorhanden → überspringen
+appendMessage(msg.role, msg.message);
 
     // Doppelte Nachrichten verhindern
 const seen = new Set();
@@ -299,18 +313,26 @@ for (const msg of data.history) {
 }
 
 
-    // 👇 Scroll immer ans Ende
-    setTimeout(() => {
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }, 100);
+    // Nur leeren, wenn noch kein Chat sichtbar ist
+if (chatBox && chatBox.children.length === 0) {
+  chatBox.innerHTML = '';
+}
 
-    // 👇 Begrüßung nur wenn keine Historie
-    if (data.history.length === 0) {
-      appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
-    }
-  } catch (err) {
-    console.error('Fehler beim Laden des Chatverlaufs:', err);
-  }
+// Existierende Inhalte erfassen
+const existing = Array.from(chatBox.children)
+  .map(c => c.textContent)
+  .join('\n');
+
+// Doppelte Nachrichten verhindern
+const seen = new Set();
+
+for (const msg of data.history) {
+  const key = msg.role + '::' + msg.message;
+  if (seen.has(key)) continue; // Schon in diesem Durchlauf vorhanden
+  seen.add(key);
+
+  if (existing.includes(msg.message)) continue; // Schon sichtbar
+  appendMessage(msg.role, msg.message);
 }
 
 // === Mic & Hotkeys (robust, Hold-X + Button) =======================
@@ -490,7 +512,7 @@ function sendMessage() {
     .catch(err => console.error('Fehler beim Senden:', err))
     .finally(() => { window.chatSending = false; });
     }
-    
+
 window.sendMessage = sendMessage;
 
 
