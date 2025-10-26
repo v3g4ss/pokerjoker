@@ -126,21 +126,22 @@ async function handleChat(req, res) {
       usedTokens = out.usedTokens;
     }
 
-    // === Token-Verbrauch berechnen (neu: pro Wort) ===
-const words = answer.trim().split(/\s+/).length;
-const factor  = Number(cfg?.punct_rate ?? process.env.PUNCT_RATE ?? 1);
+   // === Token-Verbrauch berechnen (pro Wort + Satzzeichen) ===
+const words = answer?.trim().split(/\s+/).length || 1;
+const punctCount = (answer?.match(/[.!?,;:]/g) || []).length;
+const punctRate = Number(cfg?.punct_rate ?? process.env.PUNCT_RATE ?? 1);
 const maxUsed = Number(cfg?.max_usedtokens_per_msg ?? process.env.MAX_USEDTOKENS_PER_MSG ?? 300);
 
 // Verbrauch berechnen
-let baseCost = words * factor;
-let toCharge = Math.min(Math.ceil(baseCost), maxUsed);
+const baseCost = words + punctCount; // Wörter + Satzzeichen
+let toCharge = Math.min(Math.ceil(baseCost * punctRate), maxUsed);
 
 console.log('[DEBUG] Tokenverbrauch (pro Wort):', {
-  uid, words, factor, baseCost, toCharge
+  uid, words, punctCount, punctRate, baseCost, toCharge
 });
 
 try {
-  await tokenDb.consumeTokens(uid, toCharge, `chat usage=${words}×${factor}`);
+  await tokenDb.consumeTokens(uid, toCharge, `chat usage=${words} words + ${punctCount} punct ×${punctRate}`);
 } catch (e) {
   console.error('❌ Token-Abbuchung fehlgeschlagen:', e.message);
   return res.status(402).json({ reply: '❌ Token-Abbuchung gescheitert 😵 Buy-in nötig!' });
