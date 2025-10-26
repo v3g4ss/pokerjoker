@@ -446,6 +446,7 @@ router.get('/ledger/user/:id', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // === Ledger mit Pagination (für Dashboard) ===
+// → Chat-Verbrauchseinträge ausblenden
 router.get('/ledger', async (req, res) => {
   try {
     const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -456,11 +457,17 @@ router.get('/ledger', async (req, res) => {
       SELECT l.id, l.user_id, u.email, l.delta, l.reason, l.balance AS balance_after, l.created_at
       FROM v_token_ledger_detailed l
       LEFT JOIN users u ON u.id = l.user_id
+      WHERE l.reason NOT ILIKE '%chat%'
       ORDER BY l.id DESC
       LIMIT $1 OFFSET $2
     `, [limit, off]);
 
-    const totalRes = await pool.query('SELECT COUNT(*)::int AS total FROM public.v_token_ledger_detailed');
+    const totalRes = await pool.query(`
+      SELECT COUNT(*)::int AS total
+      FROM public.v_token_ledger_detailed
+      WHERE reason NOT ILIKE '%chat%'
+    `);
+
     res.json({ ok:true, items: rows, page, limit, total: totalRes.rows[0].total });
   } catch (e) {
     console.error('GET /api/admin/ledger', e);
