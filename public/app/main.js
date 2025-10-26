@@ -517,15 +517,15 @@ async function sendToBot(message) {
     }
 
     if (res.status === 402) {
-      // Doppel-Check, damit keine doppelte Anzeige kommt
-      const lastMsg = chatBox.lastElementChild?.textContent || '';
-      if (!lastMsg.includes('Zu wenig Tokens')) {
-        const d = await res.json().catch(() => ({}));
-        appendMessage('bot', d.reply || 'Zu wenig Tokens. Bitte Buy-in!');
-      }
-      chatSending = false;
-      return;
-    }
+  const d = await res.json().catch(() => ({}));
+  const lastMsg = chatBox.lastElementChild?.textContent || '';
+  if (!lastMsg.includes('Zu wenig Tokens')) {
+    appendMessage('bot', d.reply || 'Zu wenig Tokens. Bitte Buy-in!');
+  }
+  chatSending = false;
+  return;
+}
+
 
     if (!res.ok) {
       const payload = await res.text();
