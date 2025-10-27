@@ -564,7 +564,7 @@ async function sendMessage() {
 
     const data = await res.json().catch(() => ({}));
 
-    // === Bot-Antwort speichern + anzeigen ===
+    // === Bot-Antwort nur speichern, nicht doppelt anzeigen ===
     try {
       await fetch('/api/chat/save', {
         method: 'POST',
@@ -572,10 +572,12 @@ async function sendMessage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: 'bot', message: data.reply || '…' })
       });
-      appendMessage('bot', data.reply || '…');
     } catch (err) {
       console.warn('Bot-Message save failed:', err);
     }
+
+    // Nur EINE Anzeige der Antwort
+    appendMessage('bot', data.reply || '…');
 
     // === Tokens neu laden (z.B. -50 nach Antwort) ===
     try { await refreshTokenUI(); } catch {}
