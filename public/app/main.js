@@ -24,9 +24,24 @@ window.fetch = (url, opts = {}) => {
   return oldFetch(url, opts);
 };
 
-// === Nachrichten anhängen ===
-function appendMessage(role, text) {
+// Alte Listener entfernen & neu setzen
+if (button) {
+  const newBtn = button.cloneNode(true);
+  button.parentNode.replaceChild(newBtn, button);
+  newBtn.addEventListener('click', () => {
+    if (!window._sending) sendMessage();
+  });
 }
+
+if (input) {
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !window._sending) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+}
+
 // === Logout ===
 if (logoutBtn) {
   logoutBtn.addEventListener('click', async () => {
@@ -493,11 +508,12 @@ async function loadChatHistory() {
 
 
 // ---------------------------
-// Senden
+// Senden (saubere Version, Doppler-frei)
 // ---------------------------
-function sendMessage() {
-  if (window.chatSending) return;           // Blockieren, falls bereits am Antworten
-  window.chatSending = true;                // Sperre aktiv
+async function sendMessage() {
+  // Wenn bereits gesendet wird → abbrechen
+  if (window.chatSending) return;
+  window.chatSending = true;
 
   const message = (input?.value || '').trim();
   if (!message) {
@@ -505,25 +521,17 @@ function sendMessage() {
     return;
   }
 
-  // Zu wenig Tokens?
+  // === Tokenprüfung ===
   if (state.balance < MIN_BAL) {
     appendMessage('bot', '🔋 Zu wenig Tokens. Bitte Buy-in!');
     window.chatSending = false;
     return;
   }
 
+  // === User-Message anzeigen + Eingabefeld leeren ===
   appendMessage('user', message);
   if (input) input.value = '';
 
-  sendToBot(message)
-    .catch(err => console.error('Fehler beim Senden:', err))
-    .finally(() => { window.chatSending = false; });
-    }
-
-window.sendMessage = sendMessage;
-
-
-async function sendToBot(message) {
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
@@ -532,6 +540,7 @@ async function sendToBot(message) {
       body: JSON.stringify({ message, topK: 6 })
     });
 
+    // === Fehlerbehandlung ===
     if (res.status === 401) {
       appendMessage('bot', '⛔ Nicht eingeloggt. Ich schick dich kurz zum Login…');
       setTimeout(() => (location.href = '/login'), 900);
@@ -539,15 +548,13 @@ async function sendToBot(message) {
     }
 
     if (res.status === 402) {
-  const d = await res.json().catch(() => ({}));
-  const lastMsg = chatBox.lastElementChild?.textContent || '';
-  if (!lastMsg.includes('Zu wenig Tokens')) {
-    appendMessage('bot', d.reply || 'Zu wenig Tokens. Bitte Buy-in!');
-  }
-  chatSending = false;
-  return;
-}
-
+      const d = await res.json().catch(() => ({}));
+      const lastMsg = chatBox.lastElementChild?.textContent || '';
+      if (!lastMsg.includes('Zu wenig Tokens')) {
+        appendMessage('bot', d.reply || 'Zu wenig Tokens. Bitte Buy-in!');
+      }
+      return;
+    }
 
     if (!res.ok) {
       const payload = await res.text();
@@ -557,26 +564,23 @@ async function sendToBot(message) {
 
     const data = await res.json().catch(() => ({}));
 
+    // === Bot-Antwort speichern + anzeigen ===
     try {
-      // === Bot-Antwort sofort in DB sichern ===
       await fetch('/api/chat/save', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: 'bot', message: data.reply || '…' })
       });
-
-      // === Erst anzeigen, wenn DB-Speicherung durch ist ===
       appendMessage('bot', data.reply || '…');
     } catch (err) {
       console.warn('Bot-Message save failed:', err);
-    } finally {
-      window.chatSending = false;   // Flag immer freigeben – auch bei Fehlern
     }
 
-    // NEU: nach erfolgreicher Antwort neu einlesen (zieht auch -50 ab)
+    // === Tokens neu laden (z.B. -50 nach Antwort) ===
     try { await refreshTokenUI(); } catch {}
 
+    // === Quellen anzeigen ===
     if (data.sources && Array.isArray(data.sources) && data.sources.length) {
       const seen = new Set();
       const titles = data.sources
@@ -591,8 +595,38 @@ async function sendToBot(message) {
   } catch (err) {
     console.error(err);
     appendMessage('bot', '🛑 Netzwerkfehler. Versuch’s gleich nochmal.');
+  } finally {
+    // Sperre IMMER freigeben – auch bei Fehlern
+    window.chatSending = false;
   }
 }
+
+window.sendMessage = sendMessage;
+
+// ---------------------------
+// Events: Button + Enter (Doppler-Schutz)
+// ---------------------------
+const sendBtn = document.getElementById('sendButton');
+const inputEl = document.getElementById('userInput');
+
+// Sicherstellen, dass keine doppelten Listener existieren
+if (sendBtn) {
+  const newBtn = sendBtn.cloneNode(true);
+  sendBtn.parentNode.replaceChild(newBtn, sendBtn);
+  newBtn.addEventListener('click', () => {
+    if (!window.chatSending) sendMessage();
+  });
+}
+
+if (inputEl) {
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !window.chatSending) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+}
+
 
 // ---------------------------
 // Letzten Satz löschen – Satzzeichen bleiben
