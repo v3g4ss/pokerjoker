@@ -26,7 +26,6 @@ window.fetch = (url, opts = {}) => {
 
 // === Nachrichten anhängen ===
 function appendMessage(role, text) {
-  ...
 }
 // === Logout ===
 if (logoutBtn) {
