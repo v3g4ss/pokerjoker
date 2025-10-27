@@ -27,11 +27,12 @@ app.post(
 );
 
 // --- Middleware ---
-app.use(cookieParser());
 app.use(cors({
   origin: ['https://poker-joker.tech', 'https://www.poker-joker.tech'],
   credentials: true
 }));
+app.use(cookieParser());                 // <-- nach CORS!
+app.use(require('./middleware/logger'));
 app.use(express.json({ limit: '1mb' }));
 
 app.use((req, res, next) => {
@@ -162,14 +163,22 @@ app.post('/contact', async (req, res) => {
 const doLogout = (req, res) => {
   const opts = {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
+    sameSite: 'None',   // wichtig für Cross-Site-Cookie
+    secure: true,        // Render nutzt HTTPS → immer true
+    path: '/',           // gesamte Domain
   };
-  res.clearCookie('session', opts);
-  res.clearCookie('sid', opts);
-  res.json({ ok: true });
+
+  try {
+    res.clearCookie('session', opts);
+    res.clearCookie('sid', opts);
+    console.log('✅ Logout: Cookies wurden entfernt');
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('❌ Logout-Fehler:', err.message);
+    res.status(500).json({ ok: false, error: 'Logout fehlgeschlagen' });
+  }
 };
+
 app.post('/api/logout', doLogout);
 app.post('/api/auth/logout', doLogout);
 
