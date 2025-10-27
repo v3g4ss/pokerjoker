@@ -17,6 +17,17 @@ const speechStatus = document.getElementById('speechStatus');
 
 const STORAGE_KEY = 'pokerjoker_chatlog';
 
+// Immer Cookies mitsenden – globales Patch für fetch()
+const oldFetch = window.fetch;
+window.fetch = (url, opts = {}) => {
+  opts.credentials = 'include';
+  return oldFetch(url, opts);
+};
+
+// === Nachrichten anhängen ===
+function appendMessage(role, text) {
+  ...
+}
 // === Logout ===
 if (logoutBtn) {
   logoutBtn.addEventListener('click', async () => {
@@ -255,13 +266,23 @@ if (location.pathname.endsWith('/app/pay-success.html')) {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     const r = await fetch('/api/auth/me', { credentials: 'include' });
-    if (r.status === 401) console.warn('Nicht eingeloggt');
-  } catch {}
+    if (r.status === 401) {
+      console.warn('Nicht eingeloggt');
+    } else {
+      console.log('✅ Eingeloggt – Cookie erkannt');
+    }
+  } catch (err) {
+    console.warn('Fehler bei /api/auth/me', err);
+  }
 
-  // Tokens sofort laden
-  // await refreshTokenUI();
+  // === Tokens sofort laden ===
+  try {
+    await refreshTokenUI(); // <-- jetzt aktiv!
+  } catch (err) {
+    console.warn('Fehler bei refreshTokenUI', err);
+  }
 
-  // Chatverlauf laden
+  // === Chatverlauf laden ===
   await loadChatHistory();
 
   // Eingabe-Events binden
@@ -278,6 +299,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     button.addEventListener('click', sendMessage);
   }
 });
+
+setInterval(refreshTokenUI, 30000); 
 
 // Chatverlauf laden
 async function loadChatHistory() {
