@@ -323,14 +323,7 @@ async function loadChatHistory() {
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    // Chatverlauf laden
-async function loadChatHistory() {
-  try {
-    const res = await fetch('/api/chat/history', { credentials: 'include' });
-    const data = await res.json();
-    if (!data.ok || !Array.isArray(data.history)) return;
-
-    // === Nur laden, wenn Chat leer ist (verhindert Doppler nach Reload) ===
+    // Nur laden, wenn der Chat aktuell leer ist (verhindert Doppler)
     if (!chatBox || chatBox.children.length > 0) {
       console.log('⏭️ Chat bereits befüllt – keine Doppelanzeige.');
       return;
@@ -338,7 +331,7 @@ async function loadChatHistory() {
 
     chatBox.innerHTML = '';
 
-    // === Doppelte Nachrichten im Verlauf filtern ===
+    // Doppelte Nachrichten im Verlauf filtern
     const seen = new Set();
     for (const msg of data.history) {
       const key = msg.role + '::' + msg.message.trim();
@@ -347,12 +340,12 @@ async function loadChatHistory() {
       appendMessage(msg.role, msg.message);
     }
 
-    // === Automatisch zum Ende scrollen ===
+    // Auto-Scroll ans Ende
     setTimeout(() => {
       chatBox.scrollTop = chatBox.scrollHeight;
     }, 150);
 
-    // === Nur wenn gar keine History vorhanden ===
+    // Begrüßung nur, wenn keine History vorhanden
     if (data.history.length === 0) {
       appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
     }
@@ -510,7 +503,6 @@ async function loadChatHistory() {
   }
 })(); // === Ende Mic & Hotkeys
 
-
 // ---------------------------
 // Senden (saubere Version, Doppler-frei)
 // ---------------------------
@@ -603,7 +595,7 @@ async function sendMessage() {
 } finally {
   window.chatSending = false;
 }
-
+}
 window.sendMessage = sendMessage;
 
 // ---------------------------
@@ -669,5 +661,3 @@ window.deleteLastSentence = deleteLastSentence;
 document.getElementById('buyinBtn')?.addEventListener('click', () => {
   window.location.href = '/app/pay.html';
 });
-
-
