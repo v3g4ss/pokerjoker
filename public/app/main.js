@@ -284,9 +284,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.warn('Nicht eingeloggt');
     } else {
       console.log('✅ Eingeloggt – Cookie erkannt');
+      // Chatverlauf NUR EINMAL laden
+      if (!window.__chatLoadedOnce) {
+        window.__chatLoadedOnce = true;
+        await loadChatHistory();
+      }
     }
   } catch (err) {
     console.warn('Fehler bei /api/auth/me', err);
+  }
+
+  try { await refreshTokenUI(); } catch (err) {
+    console.warn('Fehler bei refreshTokenUI', err);
   }
 
   // === Tokens sofort laden ===
@@ -298,43 +307,43 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
   // === Chatverlauf laden (stabil, kein Doppler, kein Löschen) ===
-let historyLoaded = false;
+let lastLoadedMessage = ''; // Merkt sich den letzten Message-Text aus der DB
 
 async function loadChatHistory() {
   try {
-    // Nur laden, wenn Chat leer UND noch nie geladen wurde
-    if (historyLoaded || chatBox.children.length > 0) {
-      console.log('⏭️ Chat bereits sichtbar – nichts nachladen.');
-      return;
-    }
-
     const res = await fetch('/api/chat/history', { credentials: 'include' });
     const data = await res.json();
-
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    for (const msg of data.history) {
-      appendMessage(msg.role, msg.message);
+    const existing = Array.from(chatBox.children).map(c => c.textContent.trim());
+    const dbMessages = data.history.map(m => (m.message || '').trim());
+
+    // Nur laden, wenn der letzte DB-Eintrag noch nicht im Chat ist
+    const lastDbMsg = dbMessages.at(-1) || '';
+    const lastChatMsg = existing.at(-1) || '';
+
+    if (lastDbMsg && lastDbMsg !== lastChatMsg) {
+      // Nur die Differenz anhängen
+      const newMsgs = data.history.filter(m => !existing.includes(m.message));
+      for (const msg of newMsgs) {
+        appendMessage(msg.role, msg.message);
+      }
     }
 
-    // Begrüßung, wenn DB leer
-    if (data.history.length === 0) {
+    // Begrüßung, falls nix da ist
+    if (data.history.length === 0 && chatBox.children.length === 0) {
       appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
     }
 
-    // Scroll nach unten
+    // Scroll ans Ende
     setTimeout(() => {
       chatBox.scrollTop = chatBox.scrollHeight;
     }, 150);
-
-    // Markiere Verlauf als geladen
-    historyLoaded = true;
 
   } catch (err) {
     console.error('Fehler beim Laden des Chatverlaufs:', err);
   }
 }
-
 
 // === Mic & Hotkeys (robust, Hold-X + Button) =======================
 (function initMicHotkeys(){
