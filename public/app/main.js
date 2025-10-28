@@ -297,32 +297,35 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-  // === Chatverlauf laden ===
+  // === Chatverlauf laden (Frontend bleibt persistent) ===
 async function loadChatHistory() {
   try {
     const res = await fetch('/api/chat/history', { credentials: 'include' });
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    // Alte Nachrichten komplett löschen (kein Doppler beim Reload)
-    chatBox.innerHTML = '';
+    // Existierende Nachrichten erfassen
+    const existing = Array.from(chatBox.children)
+      .map(c => c.textContent)
+      .join('\n');
 
-    // Doppelte innerhalb der DB verhindern
+    // Duplikate verhindern (in DB + DOM)
     const seen = new Set();
     for (const msg of data.history) {
       const key = msg.role + '::' + msg.message.trim();
       if (seen.has(key)) continue;
       seen.add(key);
+      if (existing.includes(msg.message)) continue;
       appendMessage(msg.role, msg.message);
     }
 
-    // Auto-Scroll ans Ende
+    // Scroll ans Ende
     setTimeout(() => {
       chatBox.scrollTop = chatBox.scrollHeight;
-    }, 150);
+    }, 100);
 
-    // Wenn es keine History gibt → Begrüßung anzeigen
-    if (data.history.length === 0) {
+    // Nur wenn nix in der DB + nix im DOM
+    if (data.history.length === 0 && chatBox.children.length === 0) {
       appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
     }
   } catch (err) {
