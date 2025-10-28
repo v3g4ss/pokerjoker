@@ -307,39 +307,30 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
   // === Chatverlauf laden (stabil, kein Doppler, kein Löschen) ===
-let lastLoadedMessage = ''; // Merkt sich den letzten Message-Text aus der DB
+// let lastLoadedMessage = ''; // Merkt sich den letzten Message-Text aus der DB
 
-// === Chatverlauf laden (immer vollständige DB anzeigen, keine Doppler, kein Verlust) ===
+// === Chatverlauf laden (nur DB – kein Textvergleich, kein Doppler) ===
 async function loadChatHistory() {
   try {
     const res = await fetch('/api/chat/history', { credentials: 'include' });
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    // Alle sichtbaren Nachrichten sammeln
-    const existing = Array.from(chatBox.children).map(el => el.textContent.trim());
-    let newCount = 0;
+    // Alte Chatbox komplett löschen und neu aufbauen
+    chatBox.innerHTML = '';
 
+    // Chronologisch alle Einträge aus DB anzeigen
     for (const msg of data.history) {
       const text = (msg.message || '').trim();
       if (!text) continue;
-
-      // Wenn Text schon im DOM vorkommt → überspringen
-      if (existing.includes(text)) continue;
-
-      // Neue Nachricht anhängen
       appendMessage(msg.role, text);
-      newCount++;
     }
 
-    // Wenn noch nichts im Chat steht → Begrüßung nur beim allerersten Mal
-    if (data.history.length === 0 && chatBox.children.length === 0) {
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    // Begrüßung nur wenn keine DB-Einträge existieren
+    if (data.history.length === 0) {
       appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
-    }
-
-    if (newCount > 0) {
-      console.log(`🟢 ${newCount} neue Nachrichten aus DB geladen`);
-      chatBox.scrollTop = chatBox.scrollHeight;
     }
 
   } catch (err) {
