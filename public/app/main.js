@@ -295,43 +295,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (err) {
     console.warn('Fehler bei refreshTokenUI', err);
   }
-
-  // === Chatverlauf laden ===
-  await loadChatHistory();
-
-  // Eingabe-Events binden
-  if (typeof chatBox !== 'undefined' && chatBox && input && button) {
-    input.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
-    });
-    input.addEventListener('keyup', (e) => e.stopPropagation());
-    input.addEventListener('keypress', (e) => e.stopPropagation());
-    button.addEventListener('click', sendMessage);
-  }
 });
 
-setInterval(refreshTokenUI, 30000); 
-
-// Chatverlauf laden
+  // === Chatverlauf laden ===
 async function loadChatHistory() {
   try {
     const res = await fetch('/api/chat/history', { credentials: 'include' });
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    // Nur laden, wenn der Chat aktuell leer ist (verhindert Doppler)
-    if (!chatBox || chatBox.children.length > 0) {
-      console.log('⏭️ Chat bereits befüllt – keine Doppelanzeige.');
-      return;
-    }
-
+    // Alte Nachrichten komplett löschen (kein Doppler beim Reload)
     chatBox.innerHTML = '';
 
-    // Doppelte Nachrichten im Verlauf filtern
+    // Doppelte innerhalb der DB verhindern
     const seen = new Set();
     for (const msg of data.history) {
       const key = msg.role + '::' + msg.message.trim();
@@ -345,7 +321,7 @@ async function loadChatHistory() {
       chatBox.scrollTop = chatBox.scrollHeight;
     }, 150);
 
-    // Begrüßung nur, wenn keine History vorhanden
+    // Wenn es keine History gibt → Begrüßung anzeigen
     if (data.history.length === 0) {
       appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
     }
