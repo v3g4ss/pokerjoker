@@ -297,38 +297,44 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-  // === Chatverlauf laden (nur wenn Chat leer ist) ===
+  // === Chatverlauf laden (stabil, kein Doppler, kein Löschen) ===
+let historyLoaded = false;
+
 async function loadChatHistory() {
   try {
-    // Nur ausführen, wenn der Chat wirklich leer ist
-    if (chatBox.children.length > 0) {
-      console.log('⏭️ Chat schon sichtbar – keine DB-Abfrage.');
+    // Nur laden, wenn Chat leer UND noch nie geladen wurde
+    if (historyLoaded || chatBox.children.length > 0) {
+      console.log('⏭️ Chat bereits sichtbar – nichts nachladen.');
       return;
     }
 
     const res = await fetch('/api/chat/history', { credentials: 'include' });
     const data = await res.json();
+
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    // Verlauf einmalig aus der DB anhängen
     for (const msg of data.history) {
       appendMessage(msg.role, msg.message);
     }
 
-    // Wenn DB leer ist → Begrüßung
+    // Begrüßung, wenn DB leer
     if (data.history.length === 0) {
       appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
     }
 
-    // Scroll ans Ende
+    // Scroll nach unten
     setTimeout(() => {
       chatBox.scrollTop = chatBox.scrollHeight;
     }, 150);
+
+    // Markiere Verlauf als geladen
+    historyLoaded = true;
 
   } catch (err) {
     console.error('Fehler beim Laden des Chatverlaufs:', err);
   }
 }
+
 
 // === Mic & Hotkeys (robust, Hold-X + Button) =======================
 (function initMicHotkeys(){
