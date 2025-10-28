@@ -543,33 +543,40 @@ async function sendMessage() {
   const data = await res.json().catch(() => ({}));
   const reply = data.reply || '…';
 
-  // 1️⃣ Antwort anzeigen
-  appendMessage('bot', reply);
+ // 1️⃣ Antwort anzeigen
+appendMessage('bot', reply);
 
-  // 2. Speicherung läuft bereits serverseitig – kein doppeltes Save nötig
+// 2️⃣ Speicherung läuft bereits serverseitig – kein zusätzliches Save nötig
 
-    // 3️⃣ Tokens aktualisieren
-  try { await refreshTokenUI(); } catch {}
+// 3️⃣ Tokens aktualisieren
+try { 
+  await refreshTokenUI(); 
+} catch (err) {
+  console.warn('Token-UI-Refresh fehlgeschlagen:', err);
+}
 
-  // 4️⃣ Quellen anzeigen
-  if (data.sources && Array.isArray(data.sources) && data.sources.length) {
-    const seen = new Set();
-    const titles = data.sources
-      .map(s => (s && String(s.title || '').trim()))
-      .filter(Boolean)
-      .filter(t => (seen.has(t) ? false : (seen.add(t), true)));
-    const top  = titles.slice(0, 3);
-    const more = Math.max(0, titles.length - top.length);
-    const line = '📚 Quellen: ' + top.join(' • ') + (more ? ` (+${more})` : '');
-    appendMessage('meta', line);
-  }
+// 4️⃣ Quellen anzeigen
+if (data.sources && Array.isArray(data.sources) && data.sources.length) {
+  const seen = new Set();
+  const titles = data.sources
+    .map(s => (s && String(s.title || '').trim()))
+    .filter(Boolean)
+    .filter(t => (seen.has(t) ? false : (seen.add(t), true)));
+
+  const top  = titles.slice(0, 3);
+  const more = Math.max(0, titles.length - top.length);
+  const line = '📚 Quellen: ' + top.join(' • ') + (more ? ` (+${more})` : '');
+
+  appendMessage('meta', line);
+}
 
 } catch (err) {
-  console.error(err);
+  console.error('Fehler beim Senden:', err);
   appendMessage('bot', '🛑 Netzwerkfehler. Versuch’s gleich nochmal.');
 } finally {
   window.chatSending = false;
 }
+
 }
 window.sendMessage = sendMessage;
 
