@@ -309,39 +309,41 @@ document.addEventListener('DOMContentLoaded', async () => {
   // === Chatverlauf laden (stabil, kein Doppler, kein Löschen) ===
 let lastLoadedMessage = ''; // Merkt sich den letzten Message-Text aus der DB
 
+// === Chatverlauf laden (immer vollständige DB anzeigen, keine Doppler, kein Verlust) ===
 async function loadChatHistory() {
   try {
     const res = await fetch('/api/chat/history', { credentials: 'include' });
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    const existing = Array.from(chatBox.children).map(c => c.textContent.trim());
-    const dbMessages = data.history.map(m => (m.message || '').trim());
+    // Alle sichtbaren Nachrichten sammeln
+    const existing = Array.from(chatBox.children).map(el => el.textContent.trim());
+    let newCount = 0;
 
-    // Nur laden, wenn der letzte DB-Eintrag noch nicht im Chat ist
-    const lastDbMsg = dbMessages.at(-1) || '';
-    const lastChatMsg = existing.at(-1) || '';
+    for (const msg of data.history) {
+      const text = (msg.message || '').trim();
+      if (!text) continue;
 
-    if (lastDbMsg && lastDbMsg !== lastChatMsg) {
-      // Nur die Differenz anhängen
-      const newMsgs = data.history.filter(m => !existing.includes(m.message));
-      for (const msg of newMsgs) {
-        appendMessage(msg.role, msg.message);
-      }
+      // Wenn Text schon im DOM vorkommt → überspringen
+      if (existing.includes(text)) continue;
+
+      // Neue Nachricht anhängen
+      appendMessage(msg.role, text);
+      newCount++;
     }
 
-    // Begrüßung, falls nix da ist
+    // Wenn noch nichts im Chat steht → Begrüßung nur beim allerersten Mal
     if (data.history.length === 0 && chatBox.children.length === 0) {
       appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
     }
 
-    // Scroll ans Ende
-    setTimeout(() => {
+    if (newCount > 0) {
+      console.log(`🟢 ${newCount} neue Nachrichten aus DB geladen`);
       chatBox.scrollTop = chatBox.scrollHeight;
-    }, 150);
+    }
 
   } catch (err) {
-    console.error('Fehler beim Laden des Chatverlaufs:', err);
+    console.error('❌ Fehler beim Laden des Chatverlaufs:', err);
   }
 }
 
