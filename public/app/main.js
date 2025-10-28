@@ -297,40 +297,33 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-  // === Chatverlauf laden (stabil, kein Doppler, kein Löschen) ===
-let chatHistoryLoaded = false;
-
+  // === Chatverlauf laden (nur wenn Chat leer ist) ===
 async function loadChatHistory() {
-  if (chatHistoryLoaded) {
-    console.log('⏭️ Verlauf bereits geladen – kein Reload.');
-    return;
-  }
-
   try {
+    // Nur ausführen, wenn der Chat wirklich leer ist
+    if (chatBox.children.length > 0) {
+      console.log('⏭️ Chat schon sichtbar – keine DB-Abfrage.');
+      return;
+    }
+
     const res = await fetch('/api/chat/history', { credentials: 'include' });
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    const seen = new Set();
-
+    // Verlauf einmalig aus der DB anhängen
     for (const msg of data.history) {
-      const key = msg.role + '::' + msg.message.trim();
-      if (seen.has(key)) continue;
-      seen.add(key);
       appendMessage(msg.role, msg.message);
+    }
+
+    // Wenn DB leer ist → Begrüßung
+    if (data.history.length === 0) {
+      appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
     }
 
     // Scroll ans Ende
     setTimeout(() => {
       chatBox.scrollTop = chatBox.scrollHeight;
     }, 150);
-
-    if (data.history.length === 0 && chatBox.children.length === 0) {
-      appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
-    }
-
-    // 🔒 Merken, dass History geladen wurde
-    chatHistoryLoaded = true;
 
   } catch (err) {
     console.error('Fehler beim Laden des Chatverlaufs:', err);
