@@ -306,9 +306,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-  // === Chatverlauf laden (stabil, kein Doppler, kein Löschen) ===
-// let lastLoadedMessage = ''; // Merkt sich den letzten Message-Text aus der DB
-
 // === Chatverlauf laden (nur DB – kein Textvergleich, kein Doppler) ===
 async function loadChatHistory() {
   try {
@@ -549,15 +546,9 @@ async function sendMessage() {
   // 1️⃣ Antwort anzeigen
   appendMessage('bot', reply);
 
-  // 2️⃣ Stilles Speichern im Hintergrund (keine zweite Anzeige!)
-  fetch('/api/chat/save', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: 'bot', message: reply })
-  }).catch(err => console.warn('Bot-Message save failed:', err));
+  // 2. Speicherung läuft bereits serverseitig – kein doppeltes Save nötig
 
-  // 3️⃣ Tokens aktualisieren
+    // 3️⃣ Tokens aktualisieren
   try { await refreshTokenUI(); } catch {}
 
   // 4️⃣ Quellen anzeigen
