@@ -297,38 +297,40 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-  // === Chatverlauf laden (nichts löschen, keine Doppler) ===
+  // === Chatverlauf laden (stabil, kein Doppler, kein Löschen) ===
+let chatHistoryLoaded = false;
+
 async function loadChatHistory() {
+  if (chatHistoryLoaded) {
+    console.log('⏭️ Verlauf bereits geladen – kein Reload.');
+    return;
+  }
+
   try {
     const res = await fetch('/api/chat/history', { credentials: 'include' });
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    // Alle existierenden Texte im DOM zusammenfassen
-    const existing = Array.from(chatBox.children)
-      .map(c => c.textContent.trim())
-      .filter(Boolean);
-
-    // Doppelte verhindern
-    const seen = new Set(existing);
+    const seen = new Set();
 
     for (const msg of data.history) {
-      const text = msg.message.trim();
-      const key = `${msg.role}::${text}`;
-      if (seen.has(key)) continue;  // Nachricht bereits im DOM
+      const key = msg.role + '::' + msg.message.trim();
+      if (seen.has(key)) continue;
       seen.add(key);
       appendMessage(msg.role, msg.message);
     }
 
-    // Immer ans Ende scrollen
+    // Scroll ans Ende
     setTimeout(() => {
       chatBox.scrollTop = chatBox.scrollHeight;
-    }, 100);
+    }, 150);
 
-    // Nur wenn gar nichts existiert
-    if (chatBox.children.length === 0) {
+    if (data.history.length === 0 && chatBox.children.length === 0) {
       appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
     }
+
+    // 🔒 Merken, dass History geladen wurde
+    chatHistoryLoaded = true;
 
   } catch (err) {
     console.error('Fehler beim Laden des Chatverlaufs:', err);
