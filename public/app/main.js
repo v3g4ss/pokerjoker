@@ -505,80 +505,74 @@ async function sendMessage() {
     return;
   }
 
-  // === User-Message anzeigen + Eingabefeld leeren ===
-  appendMessage('user', message);
-  if (input) input.value = '';
-
   try {
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, topK: 6 })
-  });
+    // === Anfrage an Backend senden ===
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ message })
+    });
 
-  // === Fehlerbehandlung ===
-  if (res.status === 401) {
-    appendMessage('bot', '⛔ Nicht eingeloggt. Ich schick dich kurz zum Login…');
-    setTimeout(() => (location.href = '/login'), 900);
-    return;
-  }
-
-  if (res.status === 402) {
-    const d = await res.json().catch(() => ({}));
-    const lastMsg = chatBox.lastElementChild?.textContent || '';
-    if (!lastMsg.includes('Zu wenig Tokens')) {
-      appendMessage('bot', d.reply || '🔋 Zu wenig Tokens. Bitte Buy-in!');
+    // === Fehlerbehandlung ===
+    if (res.status === 401) {
+      appendMessage('bot', '⛔ Nicht eingeloggt. Ich schick dich kurz zum Login…');
+      setTimeout(() => (location.href = '/login'), 900);
+      return;
     }
+
+    if (res.status === 402) {
+      const d = await res.json().catch(() => ({}));
+      const lastMsg = chatBox.lastElementChild?.textContent || '';
+      if (!lastMsg.includes('Zu wenig Tokens')) {
+        appendMessage('bot', d.reply || '🔋 Zu wenig Tokens. Bitte Buy-in!');
+      }
+      return;
+    }
+
+    if (!res.ok) {
+      const payload = await res.text();
+      appendMessage('bot', `🛑 Fehler ${res.status} ${payload || ''}`);
+      return;
+    }
+
+    const data = await res.json().catch(() => ({}));
+    const reply = data.reply || '…';
+
+    // 1️⃣ Antwort anzeigen
+    appendMessage('bot', reply);
+
+    // 2️⃣ Speicherung läuft bereits serverseitig – kein zusätzliches Save nötig
+
+    // 3️⃣ Tokens aktualisieren
+    try { 
+      await refreshTokenUI(); 
+    } catch (err) {
+      console.warn('Token-UI-Refresh fehlgeschlagen:', err);
+    }
+
+    // 4️⃣ Quellen anzeigen
+    if (data.sources && Array.isArray(data.sources) && data.sources.length) {
+      const seen = new Set();
+      const titles = data.sources
+        .map(s => (s && String(s.title || '').trim()))
+        .filter(Boolean)
+        .filter(t => (seen.has(t) ? false : (seen.add(t), true)));
+
+      const top  = titles.slice(0, 3);
+      const more = Math.max(0, titles.length - top.length);
+      const line = '📚 Quellen: ' + top.join(' • ') + (more ? ` (+${more})` : '');
+
+      appendMessage('meta', line);
+    }
+
+  } catch (err) {
+    console.error('Fehler beim Senden:', err);
+    appendMessage('bot', '🛑 Netzwerkfehler. Versuch’s gleich nochmal.');
+  } finally {
     window.chatSending = false;
-    return;
   }
-
-  if (!res.ok) {
-    const payload = await res.text();
-    appendMessage('bot', `🛑 Fehler ${res.status} ${payload || ''}`);
-    return;
-  }
-
-  const data = await res.json().catch(() => ({}));
-  const reply = data.reply || '…';
-
- // 1️⃣ Antwort anzeigen
-appendMessage('bot', reply);
-
-// 2️⃣ Speicherung läuft bereits serverseitig – kein zusätzliches Save nötig
-
-// 3️⃣ Tokens aktualisieren
-try { 
-  await refreshTokenUI(); 
-} catch (err) {
-  console.warn('Token-UI-Refresh fehlgeschlagen:', err);
 }
-
-// 4️⃣ Quellen anzeigen
-if (data.sources && Array.isArray(data.sources) && data.sources.length) {
-  const seen = new Set();
-  const titles = data.sources
-    .map(s => (s && String(s.title || '').trim()))
-    .filter(Boolean)
-    .filter(t => (seen.has(t) ? false : (seen.add(t), true)));
-
-  const top  = titles.slice(0, 3);
-  const more = Math.max(0, titles.length - top.length);
-  const line = '📚 Quellen: ' + top.join(' • ') + (more ? ` (+${more})` : '');
-
-  appendMessage('meta', line);
-}
-
-} catch (err) {
-  console.error('Fehler beim Senden:', err);
-  appendMessage('bot', '🛑 Netzwerkfehler. Versuch’s gleich nochmal.');
-} finally {
-  window.chatSending = false;
-}
-
-}
-window.sendMessage = sendMessage;
 
 // ---------------------------
 // Events: Button + Enter (Doppler-Schutz)
