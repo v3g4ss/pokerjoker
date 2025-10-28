@@ -323,32 +323,36 @@ async function loadChatHistory() {
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    // Nur leeren, wenn noch kein Chat sichtbar ist
-    if (chatBox && chatBox.children.length === 0) {
-      chatBox.innerHTML = '';
+    // Chatverlauf laden
+async function loadChatHistory() {
+  try {
+    const res = await fetch('/api/chat/history', { credentials: 'include' });
+    const data = await res.json();
+    if (!data.ok || !Array.isArray(data.history)) return;
+
+    // === Nur laden, wenn Chat leer ist (verhindert Doppler nach Reload) ===
+    if (!chatBox || chatBox.children.length > 0) {
+      console.log('⏭️ Chat bereits befüllt – keine Doppelanzeige.');
+      return;
     }
 
-    // Bereits sichtbare Inhalte erfassen
-    const existing = Array.from(chatBox.children)
-      .map(c => c.textContent)
-      .join('\n');
+    chatBox.innerHTML = '';
 
-    // Duplikate verhindern: (a) innerhalb der Antwort, (b) ggü. DOM
+    // === Doppelte Nachrichten im Verlauf filtern ===
     const seen = new Set();
     for (const msg of data.history) {
-      const key = msg.role + '::' + msg.message;
-      if (seen.has(key)) continue;          // (a)
+      const key = msg.role + '::' + msg.message.trim();
+      if (seen.has(key)) continue;
       seen.add(key);
-      if (existing.includes(msg.message)) continue; // (b)
       appendMessage(msg.role, msg.message);
     }
 
-    // Scroll ans Ende
+    // === Automatisch zum Ende scrollen ===
     setTimeout(() => {
       chatBox.scrollTop = chatBox.scrollHeight;
-    }, 100);
+    }, 150);
 
-    // Begrüßung nur wenn keine Historie
+    // === Nur wenn gar keine History vorhanden ===
     if (data.history.length === 0) {
       appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
     }
@@ -533,74 +537,71 @@ async function sendMessage() {
   if (input) input.value = '';
 
   try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, topK: 6 })
-    });
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, topK: 6 })
+  });
 
-    // === Fehlerbehandlung ===
-    if (res.status === 401) {
-      appendMessage('bot', '⛔ Nicht eingeloggt. Ich schick dich kurz zum Login…');
-      setTimeout(() => (location.href = '/login'), 900);
-      return;
-    }
-
-    if (res.status === 402) {
-      const d = await res.json().catch(() => ({}));
-      const lastMsg = chatBox.lastElementChild?.textContent || '';
-      if (!lastMsg.includes('Zu wenig Tokens')) {
-        appendMessage('bot', d.reply || 'Zu wenig Tokens. Bitte Buy-in!');
-      }
-      return;
-    }
-
-    if (!res.ok) {
-      const payload = await res.text();
-      appendMessage('bot', `🛑 Fehler ${res.status} ${payload || ''}`);
-      return;
-    }
-
-    const data = await res.json().catch(() => ({}));
-
-    // === Bot-Antwort nur speichern, nicht doppelt anzeigen ===
-    try {
-      await fetch('/api/chat/save', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: 'bot', message: data.reply || '…' })
-      });
-    } catch (err) {
-      console.warn('Bot-Message save failed:', err);
-    }
-
-    // Nur EINE Anzeige der Antwort
-    appendMessage('bot', data.reply || '…');
-
-    // === Tokens neu laden (z.B. -50 nach Antwort) ===
-    try { await refreshTokenUI(); } catch {}
-
-    // === Quellen anzeigen ===
-    if (data.sources && Array.isArray(data.sources) && data.sources.length) {
-      const seen = new Set();
-      const titles = data.sources
-        .map(s => (s && String(s.title || '').trim()))
-        .filter(Boolean)
-        .filter(t => (seen.has(t) ? false : (seen.add(t), true)));
-      const top  = titles.slice(0, 3);
-      const more = Math.max(0, titles.length - top.length);
-      const line = 'Quellen: ' + top.join(' • ') + (more ? ` (+${more})` : '');
-      appendMessage('meta', line);
-    }
-  } catch (err) {
-    console.error(err);
-    appendMessage('bot', '🛑 Netzwerkfehler. Versuch’s gleich nochmal.');
-  } finally {
-    // Sperre IMMER freigeben – auch bei Fehlern
-    window.chatSending = false;
+  // === Fehlerbehandlung ===
+  if (res.status === 401) {
+    appendMessage('bot', '⛔ Nicht eingeloggt. Ich schick dich kurz zum Login…');
+    setTimeout(() => (location.href = '/login'), 900);
+    return;
   }
+
+  if (res.status === 402) {
+    const d = await res.json().catch(() => ({}));
+    const lastMsg = chatBox.lastElementChild?.textContent || '';
+    if (!lastMsg.includes('Zu wenig Tokens')) {
+      appendMessage('bot', d.reply || '🔋 Zu wenig Tokens. Bitte Buy-in!');
+    }
+    window.chatSending = false;
+    return;
+  }
+
+  if (!res.ok) {
+    const payload = await res.text();
+    appendMessage('bot', `🛑 Fehler ${res.status} ${payload || ''}`);
+    return;
+  }
+
+  const data = await res.json().catch(() => ({}));
+  const reply = data.reply || '…';
+
+  // 1️⃣ Antwort anzeigen
+  appendMessage('bot', reply);
+
+  // 2️⃣ Stilles Speichern im Hintergrund (keine zweite Anzeige!)
+  fetch('/api/chat/save', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'bot', message: reply })
+  }).catch(err => console.warn('Bot-Message save failed:', err));
+
+  // 3️⃣ Tokens aktualisieren
+  try { await refreshTokenUI(); } catch {}
+
+  // 4️⃣ Quellen anzeigen
+  if (data.sources && Array.isArray(data.sources) && data.sources.length) {
+    const seen = new Set();
+    const titles = data.sources
+      .map(s => (s && String(s.title || '').trim()))
+      .filter(Boolean)
+      .filter(t => (seen.has(t) ? false : (seen.add(t), true)));
+    const top  = titles.slice(0, 3);
+    const more = Math.max(0, titles.length - top.length);
+    const line = '📚 Quellen: ' + top.join(' • ') + (more ? ` (+${more})` : '');
+    appendMessage('meta', line);
+  }
+
+} catch (err) {
+  console.error(err);
+  appendMessage('bot', '🛑 Netzwerkfehler. Versuch’s gleich nochmal.');
+} finally {
+  window.chatSending = false;
 }
 
 window.sendMessage = sendMessage;
