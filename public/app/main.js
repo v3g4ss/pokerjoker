@@ -487,10 +487,11 @@ async function loadChatHistory() {
 })(); // === Ende Mic & Hotkeys
 
 // ---------------------------
-// Senden (saubere Version, Doppler-frei)
-// ---------------------------
+// =======================================
+// Chatnachricht senden (Doppler-frei)
+// =======================================
 async function sendMessage() {
-  // Wenn bereits gesendet wird → abbrechen
+  // Falls bereits eine Antwort läuft → abbrechen
   if (window.chatSending) return;
   window.chatSending = true;
 
@@ -508,7 +509,7 @@ async function sendMessage() {
   }
 
   try {
-    // === Anfrage an Backend senden ===
+    // === Nachricht ans Backend schicken ===
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -538,33 +539,30 @@ async function sendMessage() {
       return;
     }
 
+    // === Antwort des Bots auslesen ===
     const data = await res.json().catch(() => ({}));
-    const reply = data.reply || '…';
+    const reply = data.reply?.trim() || '…';
 
-    // 1️⃣ Antwort anzeigen
+    // === Nur einmal anzeigen (nicht nochmal speichern) ===
     appendMessage('bot', reply);
 
-    // 2️⃣ Speicherung läuft bereits serverseitig – kein zusätzliches Save nötig
-
-    // 3️⃣ Tokens aktualisieren
-    try { 
-      await refreshTokenUI(); 
+    // Tokens aktualisieren
+    try {
+      await refreshTokenUI();
     } catch (err) {
       console.warn('Token-UI-Refresh fehlgeschlagen:', err);
     }
 
-    // 4️⃣ Quellen anzeigen
-    if (data.sources && Array.isArray(data.sources) && data.sources.length) {
+    // === Quellen anzeigen (falls vorhanden) ===
+    if (Array.isArray(data.sources) && data.sources.length > 0) {
       const seen = new Set();
       const titles = data.sources
-        .map(s => (s && String(s.title || '').trim()))
+        .map(s => String(s.title || '').trim())
         .filter(Boolean)
         .filter(t => (seen.has(t) ? false : (seen.add(t), true)));
-
-      const top  = titles.slice(0, 3);
+      const top = titles.slice(0, 3);
       const more = Math.max(0, titles.length - top.length);
       const line = '📚 Quellen: ' + top.join(' • ') + (more ? ` (+${more})` : '');
-
       appendMessage('meta', line);
     }
 
@@ -572,6 +570,7 @@ async function sendMessage() {
     console.error('Fehler beim Senden:', err);
     appendMessage('bot', '🛑 Netzwerkfehler. Versuch’s gleich nochmal.');
   } finally {
+    // Sperre aufheben
     window.chatSending = false;
   }
 }
