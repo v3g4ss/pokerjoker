@@ -191,11 +191,12 @@ router.get('/history', requireAuth, async (req, res) => {
       SELECT id, role, message, created_at
       FROM chat_history
       WHERE user_id = $1
-      ORDER BY id ASC
-      LIMIT 100
+      ORDER BY id DESC
+      LIMIT 200
     `, [uid]);
 
-    res.json({ ok: true, history: rows });
+    // Neueste zuerst → umdrehen, damit Anzeige aufsteigend ist
+    res.json({ ok: true, history: rows.reverse() });
   } catch (err) {
     console.error('Fehler beim Laden der Chat-Historie:', err.message);
     res.status(500).json({ ok: false, error: 'Interner Fehler beim Laden der Chat-Historie' });
