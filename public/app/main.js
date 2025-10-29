@@ -299,6 +299,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Merker: bis zu welcher DB-ID wurde gerendert
 let lastRenderedId = 0;
+if (chatBox) chatBox.innerHTML = ''; // alten Verlauf löschen
 
 // === Chatverlauf laden (nur DB – kein Textvergleich, kein Doppler) ===
 async function loadChatHistory() {
@@ -492,6 +493,8 @@ async function sendMessage() {
   }
 
 appendMessage('user', message);
+
+input.value = ''; // ✅ Eingabefeld nach Senden leeren
 
   // === Tokenprüfung ===
   if (state.balance < MIN_BAL) {
