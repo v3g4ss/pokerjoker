@@ -33,15 +33,6 @@ if (button) {
   });
 }
 
-if (input) {
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && !window._sending) {
-      e.preventDefault();
-      sendMessage();
-    }
-  });
-}
-
 // === Logout ===
 if (logoutBtn) {
   logoutBtn.addEventListener('click', async () => {
@@ -486,7 +477,6 @@ async function loadChatHistory() {
   }
 })(); // === Ende Mic & Hotkeys
 
-// ---------------------------
 // =======================================
 // Chatnachricht senden (Doppler-frei)
 // =======================================
@@ -500,6 +490,8 @@ async function sendMessage() {
     window.chatSending = false;
     return;
   }
+
+appendMessage('user', message);
 
   // === Tokenprüfung ===
   if (state.balance < MIN_BAL) {

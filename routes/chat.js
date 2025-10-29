@@ -167,18 +167,6 @@ try {
   console.error('Fehler beim Speichern der Chat-History:', e.message);
 }
 
-// === Verlauf speichern ===
-try {
-  await pool.query(
-    `INSERT INTO chat_history (user_id, role, message, created_at) VALUES 
-     ($1, 'user', $2, NOW()),
-     ($1, 'bot',  $3, NOW())`,
-    [uid, userText, answer]
-  );
-} catch (err) {
-  console.error('❌ Fehler beim Speichern in chat_history:', err.message);
-}
-
     return res.json({
       ok: true,
       reply: answer,
