@@ -192,7 +192,7 @@ router.get('/history', requireAuth, async (req, res) => {
       FROM chat_history
       WHERE user_id = $1
       ORDER BY id DESC
-      LIMIT 200
+      LIMIT 100
     `, [uid]);
 
     // Neueste zuerst → umdrehen, damit Anzeige aufsteigend ist
