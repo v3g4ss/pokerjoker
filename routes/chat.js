@@ -200,10 +200,10 @@ router.get('/history', requireAuth, async (req, res) => {
     if (!uid) return res.status(401).json({ ok: false, error: 'Nicht eingeloggt' });
 
     const { rows } = await pool.query(`
-      SELECT role, message, created_at
+      SELECT id, role, message, created_at
       FROM chat_history
       WHERE user_id = $1
-      ORDER BY created_at ASC
+      ORDER BY id ASC
       LIMIT 100
     `, [uid]);
 

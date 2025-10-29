@@ -306,6 +306,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+// Merker: bis zu welcher DB-ID wurde gerendert
+let lastRenderedId = 0;
+
 // === Chatverlauf laden (nur DB – kein Textvergleich, kein Doppler) ===
 async function loadChatHistory() {
   try {
@@ -313,25 +316,24 @@ async function loadChatHistory() {
     const data = await res.json();
     if (!data.ok || !Array.isArray(data.history)) return;
 
-    // Alte Chatbox komplett löschen und neu aufbauen
-    chatBox.innerHTML = '';
-
-    // Chronologisch alle Einträge aus DB anzeigen
+    // Erwartet: history = [{ id, role, message, created_at }, ...] aufsteigend nach id
     for (const msg of data.history) {
-      const text = (msg.message || '').trim();
+      // Falls Backend (noch) keine id liefert, nimm created_at als Notlösung:
+      const mid = Number(msg.id || 0);
+      if (mid && mid <= lastRenderedId) continue; // schon gerendert
+
+      const text = String(msg.message ?? '').trim();
       if (!text) continue;
-      appendMessage(msg.role, text);
+
+      appendMessage(msg.role === 'assistant' ? 'bot' : msg.role, text);
+
+      if (mid) lastRenderedId = mid;
     }
 
-    chatBox.scrollTop = chatBox.scrollHeight;
-
-    // Begrüßung nur wenn keine DB-Einträge existieren
-    if (data.history.length === 0) {
-      appendMessage('bot', 'Hey Digga! Willkommen beim Poker Joker 🤙');
-    }
-
+    // sanft ans Ende scrollen
+    setTimeout(() => { chatBox.scrollTop = chatBox.scrollHeight; }, 50);
   } catch (err) {
-    console.error('❌ Fehler beim Laden des Chatverlaufs:', err);
+    console.error('Fehler beim Laden des Chatverlaufs:', err);
   }
 }
 
