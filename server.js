@@ -54,6 +54,7 @@ const adminRoutes = require('./routes/admin');
 const adminBotRoutes = require('./routes/admin-bot');
 const adminKbRoutes = require('./routes/admin-kb');
 const adminMessagesRoutes = require('./routes/admin-messages');
+const adminPayConfig = require('./routes/admin-payconfig');
 
 app.use('/api/admin', adminPromptRoutes);
 app.use('/api/admin', adminRoutes);
@@ -61,6 +62,7 @@ app.use('/api/admin', adminBotRoutes);
 app.use('/api/admin', adminKbRoutes);
 app.use('/api/admin', adminMessagesRoutes);
 app.use('/api/admin', adminMenuRoutes);
+app.use('/api/admin/payconfig', adminPayConfig);
 
 // --- User APIs ---
 const chatRoutes = require('./routes/chat');
@@ -74,6 +76,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api', menuRoutes);
 app.use('/api', messagesRoutes);
 app.use('/api/tokens', tokensRoutes);
+
 
 // --- Auth ---
 app.use(
