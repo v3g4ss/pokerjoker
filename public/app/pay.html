@@ -1,154 +1,150 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Token kaufen – Poker Joker</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token kaufen</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="buy-container">
+    <h1>💰 Token kaufen</h1>
+    <div class="buy-card">
+      <h2>🔥 <span id="tokenAmount">10.000</span> Tokens</h2>
+      <p>für deinen nächsten Schlagabtausch mit dem Poker Joker 🃏🤖</p>
+      <div class="price" id="priceAmount">–</div>
+
+      <button id="buyStripe">Mit Stripe zahlen</button>
+      <button id="buyPaypal">Mit PayPal zahlen</button>
+    </div>
+    <a href="./index.html" class="back-link">← Zurück zur App</a>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      try {
+        // === PayConfig dynamisch aus DB laden ===
+        const res = await fetch("/api/admin/payconfig", { credentials: "include" });
+        const cfg = await res.json();
+
+        // 🔧 Sicherheit: String → Zahl konvertieren
+        cfg.price_eur = parseFloat(cfg.price_eur);
+        cfg.token_amount = parseInt(cfg.token_amount);
+
+        // === Anzeige aktualisieren ===
+        document.getElementById("tokenAmount").innerText = cfg.token_amount.toLocaleString();
+        document.getElementById("priceAmount").innerText = `${cfg.price_eur.toFixed(2).replace('.', ',')} €`;
+
+        // === Stripe Button ===
+        document.getElementById("buyStripe").addEventListener("click", async () => {
+          try {
+            const r = await fetch("/api/pay/stripe/checkout", {
+              method: "POST",
+              credentials: "include"
+            });
+            const d = await r.json();
+            if (d.ok && d.url) window.location.href = d.url;
+            else alert("Stripe-Checkout fehlgeschlagen!");
+          } catch (err) {
+            console.error("[Stripe]", err);
+            alert("Stripe-Fehler");
+          }
+        });
+
+        // === PayPal Button ===
+        document.getElementById("buyPaypal").addEventListener("click", async () => {
+          try {
+            const r = await fetch("/api/paypal/create-order", {
+              method: "POST",
+              credentials: "include"
+            });
+            const d = await r.json();
+            if (d.ok && d.approvalUrl) window.location.href = d.approvalUrl;
+            else alert("PayPal-Checkout fehlgeschlagen!");
+          } catch (err) {
+            console.error("[PayPal]", err);
+            alert("PayPal-Fehler");
+          }
+        });
+
+      } catch (err) {
+        console.error("Fehler beim Laden der PayConfig:", err);
+        alert("Konnte Preis-/Token-Daten nicht laden!");
+      }
+    });
+  </script>
+
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(to right, #0f0c29, #302b63, #24243e);
-      color: #fff;
-      padding: 2rem;
+      background: #1c1642;
+      color: white;
+      font-family: "Segoe UI", sans-serif;
       text-align: center;
+      padding: 40px;
     }
 
-    h1 {
-      margin-bottom: 1rem;
+    .buy-container h1 {
+      font-size: 2rem;
+      margin-bottom: 20px;
     }
 
-    .package {
-      border: 2px solid #ffcc00;
+    .buy-card {
+      display: inline-block;
+      background: #2a245e;
+      border: 2px solid #fbc531;
       border-radius: 12px;
-      padding: 2rem;
-      margin: 2rem auto;
-      max-width: 400px;
-      background: rgba(0, 0, 0, 0.3);
+      padding: 30px 40px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
     }
 
     .price {
-      font-size: 1.8rem;
+      font-size: 2rem;
       font-weight: bold;
-      color: #ffcc00;
-      margin: 1rem 0;
+      color: #fbc531;
+      margin: 15px 0;
     }
 
-    .btn {
+    button {
       display: block;
-      width: 100%;
-      margin: 0.5rem 0;
-      padding: 1rem;
-      font-size: 1rem;
-      font-weight: bold;
+      width: 220px;
+      margin: 10px auto;
+      padding: 10px 0;
       border: none;
       border-radius: 8px;
       cursor: pointer;
+      font-size: 1rem;
+      transition: 0.2s;
     }
 
-    .stripe-btn {
-      background-color: #635bff;
+    #buyStripe {
+      background: #706fd3;
       color: white;
     }
 
-    .paypal-btn {
-      background-color: #ffc439;
-      color: #111;
+    #buyStripe:hover {
+      background: #5754a3;
+    }
+
+    #buyPaypal {
+      background: #fbc531;
+      color: black;
+    }
+
+    #buyPaypal:hover {
+      background: #e0a800;
     }
 
     .back-link {
       display: inline-block;
-      margin-top: 2rem;
-      color: #ccc;
-      text-decoration: underline;
+      margin-top: 20px;
+      color: #aaa;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .back-link:hover {
+      color: white;
     }
   </style>
-</head>
-<body>
-  <h1>💰 Token kaufen</h1>
-
-  <div class="package">
-    <p>🔥 <strong>10.000 Tokens</strong> für deinen nächsten Schlagabtausch mit dem Poker Joker 🤖🃏</p>
-    <p class="price">48,00 €</p>
-
-    <button class="btn stripe-btn" id="buyStripe">Mit Stripe zahlen</button>
-    <button class="btn paypal-btn" id="buyPaypal">Mit PayPal zahlen</button>
-  </div>
-
-  <a class="back-link" href="/app">← Zurück zur App</a>
-
-  <script>
-    document.getElementById('buyStripe')?.addEventListener('click', async () => {
-      try {
-        const res = await fetch('/api/pay/stripe/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-        });
-
-        const data = await res.json();
-        if (data?.url) {
-          window.location.href = data.url;
-        } else {
-          alert('Stripe-Checkout fehlgeschlagen!');
-        }
-      } catch (err) {
-        alert('Stripe Fehler: ' + err.message);
-      }
-    });
-
-    document.getElementById('buyPaypal')?.addEventListener('click', async () => {
-  try {
-    const res = await fetch('/api/pay/paypal/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-    });
-
-    const data = await res.json();
-
-    // 🟩 Alte Variante:
-    // const approveLink = data.links?.find(l => l.rel === 'approve')?.href;
-
-    // 🟢 Neue Variante:
-    if (data?.approve_url) {
-      window.location.href = data.approve_url;
-    } else {
-      alert('PayPal-Checkout fehlgeschlagen!');
-      console.error('PayPal Response:', data);
-    }
-  } catch (err) {
-    alert('PayPal Fehler: ' + err.message);
-  }
-});
-  </script>
-
-  <!-- Utils & Auth -->
-  <script src="/app/js/utils.js"></script>
-  <script>
-    checkAuth(); // 🔐 Login prüfen
-  </script>
-
-  <script>
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    const res = await fetch('/api/admin/payconfig', { credentials: 'include' });
-    if (!res.ok) throw new Error('Payconfig konnte nicht geladen werden');
-
-    const cfg = await res.json();
-    console.log('💰 Aktuelle PayConfig:', cfg);
-
-    // Token & Preis im HTML ersetzen (nur Text!)
-    const tokenText = `${cfg.token_amount.toLocaleString()} Tokens`;
-    const priceText = `${cfg.price_eur.toFixed(2).replace('.', ',')} €`;
-
-    document.querySelector('.package p strong').textContent = tokenText;
-    document.querySelector('.price').textContent = priceText;
-  } catch (err) {
-    console.error('Fehler beim Laden der PayConfig:', err);
-  }
-});
-</script>
-
 </body>
 </html>
