@@ -186,8 +186,11 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
   <div>Tokens im Umlauf: <span id="statTokensCirculation">0</span></div>
 </div>
 
-  <!-- Mein Passwort ändern -->
-  <div class="card" style="margin:12px 0;">
+ <!-- Mein Passwort ändern + Token/Preis -->
+<div class="card" style="margin:12px 0; display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap;">
+
+  <!-- Passwort ändern -->
+  <div style="flex:1; min-width:260px;">
     <h2>Mein Passwort ändern</h2>
     <div class="row" style="gap:8px;">
       <input id="meOldPass" type="password" placeholder="Aktuelles Passwort">
@@ -196,6 +199,21 @@ button[title] { background: transparent; border: none; font-size: 1.2rem; }
       <span id="mePassStatus" class="muted"></span>
     </div>
   </div>
+
+  <!-- Tokens / Preis -->
+  <div style="flex:1; min-width:260px;">
+    <h2>💰 Tokens / Preis (€)</h2>
+    <form id="payConfigForm" class="row" style="gap:8px;">
+      <input id="token_amount" type="number" placeholder="Tokens">
+      <input id="price_eur" type="number" step="0.01" placeholder="Preis (€)">
+      <button type="submit">Speichern</button>
+    </form>
+  </div>
+
+</div>
+
+<!-- Script für Token/Preis -->
+<script src="/app/admin-payconfig.js"></script>
 
  <!-- Users -->
 <div class="card" style="margin:12px 0;">

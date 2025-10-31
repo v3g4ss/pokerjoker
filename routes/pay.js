@@ -5,12 +5,18 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { pool } = require('../db');
 const requireAuth = require('../middleware/requireAuth');
 
+// === Dynamische Preissteuerung aus DB ===
+async function getPayConfig() {
+  const { rows } = await pool.query('SELECT price_eur, token_amount FROM settings WHERE id = 1');
+  return rows[0];
+}
+
 /**
  * Token-Pakete (Cent-Preise!)
  * Du kannst die Packs nach Bedarf anpassen.
  */
 const PACKS = {
-  t10k: { tokens: 10000, amount: 5000,  name: '10.000 Tokens' },
+  t10k: { tokens: 10000, amount: 4800,  name: '10.000 Tokens' },
   t25k: { tokens: 25000, amount: 10000, name: '25.000 Tokens' },
 };
 
@@ -18,9 +24,12 @@ const PACKS = {
 // POST /api/pay/stripe/checkout { pack_id: "t10k" }
 router.post('/stripe/checkout', requireAuth, async (req, res) => {
   try {
-    const packId = String(req.body?.pack_id || 't10k');
-    const pack = PACKS[packId];
-    if (!pack) return res.status(400).json({ ok:false, error:'unknown_pack' });
+    const cfg = await getPayConfig();
+    const pack = {
+      tokens: cfg.token_amount,
+      amount: Math.round(cfg.price_eur * 100), // EUR → Cent
+      name: `${cfg.token_amount.toLocaleString()} Tokens`
+    };
 
     const successUrl = `${process.env.APP_BASE_URL}/app/pay-success.html?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl  = `${process.env.APP_BASE_URL}/app/pay-cancel.html`;
@@ -41,8 +50,7 @@ router.post('/stripe/checkout', requireAuth, async (req, res) => {
       cancel_url: cancelUrl,
       metadata: {
         user_id: String(req.user.id),
-        token_amount: String(pack.tokens),
-        pack_id: packId,
+        token_amount: String(pack.tokens),        
       },
     });
 

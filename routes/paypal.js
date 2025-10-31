@@ -5,6 +5,7 @@ const paypal  = require('@paypal/checkout-server-sdk');
 const { pool } = require('../db');
 const requireAuth = require('../middleware/requireAuth');
 
+
 // === PayPal SDK-Client ===
 function client() {
   const envName = String(process.env.PAYPAL_ENV || 'sandbox').toLowerCase();
@@ -23,17 +24,16 @@ function client() {
   return new paypal.core.PayPalHttpClient(env);
 }
 
-// === Token-Paket ===
-const PRODUCT = {
-  name: 'Poker Joker – 10.000 Tokens',
-  token_delta: 10000,
-  price: '35.00',
-  currency: 'EUR',
-};
+// === Dynamische Preissteuerung aus DB ===
+async function getPayConfig() {
+  const { rows } = await pool.query('SELECT price_eur, token_amount FROM settings WHERE id = 1');
+  return rows[0];
+}
 
 // === Bestellung erstellen ===
 router.post('/paypal/create', requireAuth, async (req, res) => {
   try {
+    const cfg = await getPayConfig();
     const base = process.env.APP_BASE_URL || 'http://localhost:5000';
     const request = new paypal.orders.OrdersCreateRequest();
 
@@ -41,14 +41,18 @@ router.post('/paypal/create', requireAuth, async (req, res) => {
       intent: 'CAPTURE',
       purchase_units: [
         {
-          amount: { currency_code: PRODUCT.currency, value: PRODUCT.price },
-          description: PRODUCT.name,
+          amount: {
+            currency_code: 'EUR',
+            value: cfg.price_eur.toFixed(2)
+          },
+          description: `Poker Joker – ${cfg.token_amount.toLocaleString()} Tokens`,
           custom_id: JSON.stringify({
             user_id: req.user.id,
-            tokens: PRODUCT.token_delta,
+            tokens: cfg.token_amount,
           }),
         },
       ],
+
       application_context: {
         brand_name: 'Poker Joker',
         landing_page: 'NO_PREFERENCE',
