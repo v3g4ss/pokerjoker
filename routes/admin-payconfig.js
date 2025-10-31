@@ -1,7 +1,7 @@
 // routes/admin-payconfig.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../utils/db');
+const { pool } = require('../db');
 
 // === GET: aktuelle Konfig ===
 router.get('/', async (req, res) => {
