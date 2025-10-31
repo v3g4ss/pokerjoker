@@ -398,6 +398,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+    // === "Aktualisieren"-Button für Ledger ===
+  const refreshBtn = document.getElementById('btnLoadLast200');
+  if (refreshBtn) {
+    refreshBtn.textContent = '🔄 Aktualisieren';
+    refreshBtn.addEventListener('click', async () => {
+      try {
+        await loadLastLedger(1); // lädt wieder Seite 1
+        console.log('Ledger aktualisiert ✅');
+      } catch (err) {
+        console.warn('Ledger-Reload fehlgeschlagen ❌', err);
+      }
+    });
+  }
+
   // === Initialer Load Ledger ===
   loadLastLedger();
 
