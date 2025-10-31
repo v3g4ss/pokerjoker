@@ -1,4 +1,3 @@
-// routes/pay.js
 const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -11,29 +10,11 @@ async function getPayConfig() {
   return rows[0];
 }
 
-/**
- * Token-Pakete (Cent-Preise!)
- * Du kannst die Packs nach Bedarf anpassen.
- */
-const PACKS = {
-  t10k: { tokens: 10000, amount: 4800,  name: '10.000 Tokens' },
-  t25k: { tokens: 25000, amount: 10000, name: '25.000 Tokens' },
-};
-
 // === STRIPE CHECKOUT erzeugen ===
-// POST /api/pay/stripe/checkout { pack_id: "t10k" }
 router.post('/stripe/checkout', requireAuth, async (req, res) => {
   try {
     const cfg = await getPayConfig();
-    const pack = {
-      tokens: cfg.token_amount,
-      amount: Math.round(cfg.price_eur * 100), // EUR → Cent
-      name: `${cfg.token_amount.toLocaleString()} Tokens`
-    };
-
-    const successUrl = `${process.env.APP_BASE_URL}/app/pay-success.html?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl  = `${process.env.APP_BASE_URL}/app/pay-cancel.html`;
-
+    const priceCents = Math.round(cfg.price_eur * 100);
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -41,52 +22,49 @@ router.post('/stripe/checkout', requireAuth, async (req, res) => {
       line_items: [{
         price_data: {
           currency: 'eur',
-          product_data: { name: pack.name },
-          unit_amount: pack.amount, // in Cent
+          product_data: { name: `Poker Joker – ${cfg.token_amount.toLocaleString()} Tokens` },
+          unit_amount: priceCents,
         },
         quantity: 1,
       }],
-      success_url: successUrl,
-      cancel_url: cancelUrl,
+      success_url: `${process.env.APP_BASE_URL}/app/pay-success.html?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.APP_BASE_URL}/app/pay-cancel.html`,
       metadata: {
         user_id: String(req.user.id),
-        token_amount: String(pack.tokens),        
+        token_amount: String(cfg.token_amount),
+        pack_price: String(cfg.price_eur),
       },
     });
 
     return res.json({ ok: true, url: session.url });
   } catch (err) {
     console.error('[STRIPE CHECKOUT]', err);
-    return res.status(500).json({ ok:false, error:'stripe_error' });
+    return res.status(500).json({ ok: false, error: 'stripe_error' });
   }
 });
 
-// === (optional) Erfolgseite kann Session prüfen ===
-// GET /api/pay/stripe/session?session_id=...
+// === Session prüfen (optional) ===
 router.get('/stripe/session', requireAuth, async (req, res) => {
   try {
     const sid = String(req.query.session_id || '');
-    if (!sid) return res.status(400).json({ ok:false, error:'missing_session_id' });
+    if (!sid) return res.status(400).json({ ok: false, error: 'missing_session_id' });
+
     const session = await stripe.checkout.sessions.retrieve(sid);
-    return res.json({ ok:true, session });
+    return res.json({ ok: true, session });
   } catch (e) {
     console.error('[STRIPE SESSION]', e);
-    return res.status(500).json({ ok:false, error:'stripe_error' });
+    return res.status(500).json({ ok: false, error: 'stripe_error' });
   }
 });
 
-/**
- * ============ WEBHOOK ============
- * Dieser Handler wird aus server.js mit express.raw() gemountet.
- * Export: module.exports.stripeWebhook
- */
+// === Stripe Webhook Handler ===
 async function stripeWebhook(req, res) {
   const sig = req.headers['stripe-signature'];
   let event;
 
   try {
     event = stripe.webhooks.constructEvent(
-      req.body,                       // raw body!
+      req.body,
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
@@ -98,18 +76,15 @@ async function stripeWebhook(req, res) {
   try {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
-
       const userId = Number(session.metadata?.user_id || 0);
       const tokens = Number(session.metadata?.token_amount || 0);
 
       if (userId > 0 && tokens > 0) {
-        // 1) Ledger-Eintrag
         await pool.query(`
           INSERT INTO public.token_ledger (user_id, delta, reason)
           VALUES ($1, $2, 'buy_tokens_stripe')
         `, [userId, tokens]);
 
-        // 2) users.tokens + users.purchased erhöhen
         await pool.query(`
           UPDATE public.users
              SET tokens = tokens + $1,
@@ -122,9 +97,6 @@ async function stripeWebhook(req, res) {
         console.log('[STRIPE WEBHOOK] fehlendes metadata user_id/token_amount');
       }
     }
-
-    // weitere Events bei Bedarf:
-    // else if (event.type === 'payment_intent.payment_failed') { ... }
 
     return res.json({ received: true });
   } catch (err) {
