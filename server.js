@@ -19,7 +19,6 @@ app.set('trust proxy', 1);
 
 // --- Stripe Webhook ---
 const pay = require('./routes/pay');
-const paypalRouter = require('./routes/paypal');
 app.post(
   '/api/pay/stripe/webhook',
   express.raw({ type: 'application/json' }),
