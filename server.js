@@ -1,4 +1,4 @@
-// =========================== server.js (CommonJS + Brevo clean) ===========================
+// =========================== server.js (CommonJS + Brevo + PayPal Fix) ===========================
 
 // --- Imports ---
 const express = require('express');
@@ -15,7 +15,7 @@ const requireAdmin = require('./middleware/requireAdmin');
 
 // --- App ---
 const app = express();
-app.set('trust proxy', 1);
+app.set('trust proxy', 1); // Render läuft hinter Proxy (sonst verliert er Cookies)
 
 // --- Stripe Webhook ---
 const pay = require('./routes/pay');
@@ -27,17 +27,34 @@ app.post(
 
 // --- PayPal Routes ---
 const paypalRouter = require('./routes/paypal');
-app.use('/api/pay', paypalRouter);
 
 // --- Middleware ---
 app.use(cors({
   origin: ['https://poker-joker.tech', 'https://www.poker-joker.tech'],
   credentials: true
 }));
-app.use(cookieParser());                 // <-- nach CORS!
+
+app.use(cookieParser()); // Cookies zuerst parsen!
 app.use(require('./middleware/logger'));
 app.use(express.json({ limit: '1mb' }));
 
+// === Session-Cookie Handling ===
+// JWT wird in Cookies gespeichert, also wichtig: SameSite = none + secure
+app.use((req, res, next) => {
+  req.setSessionCookie = (payload) => {
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.cookie('session', token, {
+      httpOnly: true,
+      sameSite: 'none', // Muss 'none' sein für HTTPS & cross-site
+      secure: true,     // Render läuft immer mit HTTPS
+      path: '/',
+      maxAge: 1000 * 60 * 60 * 24 * 7 // 7 Tage
+    });
+  };
+  next();
+});
+
+// --- Timeout-Schutz ---
 app.use((req, res, next) => {
   res.setTimeout(15000, () => {
     if (!res.headersSent)
@@ -80,28 +97,8 @@ app.use('/api', menuRoutes);
 app.use('/api', messagesRoutes);
 app.use('/api/tokens', tokensRoutes);
 
-
 // --- Auth ---
-app.use(
-  '/api/auth',
-  (req, res, next) => {
-    req.setSessionCookie = (payload) => {
-      const token = jwt.sign(payload, process.env.JWT_SECRET, {
-        expiresIn: '7d',
-      });
-            res.cookie('session', token, {
-        httpOnly: true,
-        sameSite: 'None',  // <--- MUSS None sein
-        secure: true,      // <--- Render = HTTPS
-        path: '/',
-        maxAge: 1000 * 60 * 60 * 24 * 7
-      });
-    };
-    next();
-  },
-  authRouter
-);
-
+app.use('/api/auth', authRouter);
 app.use('/api/password', passwordRouter);
 
 // --- Static Files ---
@@ -126,19 +123,15 @@ app.post('/contact', async (req, res) => {
   try {
     const { name, email, subject, message } = req.body || {};
     if (!name || !email || !subject || !message) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Bitte alle Felder ausfüllen.' });
+      return res.status(400).json({ success: false, message: 'Bitte alle Felder ausfüllen.' });
     }
 
-    // Nachricht in DB speichern
     await pool.query(
       `INSERT INTO public.messages(name,email,subject,message,created_at)
        VALUES ($1,$2,$3,$4,now())`,
       [name, email, subject, message]
     );
 
-    // Brevo Mail versenden
     if (process.env.CONTACT_RECEIVER) {
       try {
         await sendMail({
@@ -148,7 +141,7 @@ app.post('/contact', async (req, res) => {
             <p><b>Name:</b> ${name}</p>
             <p><b>Email:</b> ${email}</p>
             <p><b>Nachricht:</b><br>${message}</p>
-          `,
+          `
         });
         console.log(`[CONTACT] ✅ Nachricht gesendet an ${process.env.CONTACT_RECEIVER}`);
       } catch (e) {
@@ -159,9 +152,7 @@ app.post('/contact', async (req, res) => {
     res.json({ success: true, message: 'Nachricht erfolgreich gesendet!' });
   } catch (err) {
     console.error('[CONTACT] Fehler:', err);
-    res
-      .status(500)
-      .json({ success: false, message: 'Senden fehlgeschlagen!' });
+    res.status(500).json({ success: false, message: 'Senden fehlgeschlagen!' });
   }
 });
 
@@ -169,9 +160,9 @@ app.post('/contact', async (req, res) => {
 const doLogout = (req, res) => {
   const opts = {
     httpOnly: true,
-    sameSite: 'None',   // wichtig für Cross-Site-Cookie
-    secure: true,        // Render nutzt HTTPS → immer true
-    path: '/',           // gesamte Domain
+    sameSite: 'none',
+    secure: true,
+    path: '/',
   };
 
   try {
@@ -184,15 +175,12 @@ const doLogout = (req, res) => {
     res.status(500).json({ ok: false, error: 'Logout fehlgeschlagen' });
   }
 };
-
 app.post('/api/logout', doLogout);
 app.post('/api/auth/logout', doLogout);
 
 // --- 404 + Error Handler ---
 app.all('/api/*', (req, res) =>
-  res
-    .status(404)
-    .json({ ok: false, error: `API '${req.originalUrl}' nicht gefunden.` })
+  res.status(404).json({ ok: false, error: `API '${req.originalUrl}' nicht gefunden.` })
 );
 app.use((err, _req, res, _next) => {
   console.error('UNCAUGHT ERROR:', err);
@@ -209,12 +197,8 @@ server.requestTimeout = 20000;
 
 server.listen(PORT, () => console.log(`🎯 Server läuft auf Port ${PORT}`));
 
-process.on('unhandledRejection', (err) =>
-  console.error('UNHANDLED', err)
-);
-process.on('uncaughtException', (err) =>
-  console.error('UNCAUGHT', err)
-);
+process.on('unhandledRejection', (err) => console.error('UNHANDLED', err));
+process.on('uncaughtException', (err) => console.error('UNCAUGHT', err));
 
 const shutdown = async (sig) => {
   try {
