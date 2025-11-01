@@ -21,80 +21,85 @@
   </div>
 
   <script>
-    document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    // === PayConfig dynamisch aus DB laden ===
+    const res = await fetch("/api/admin/payconfig", { credentials: "include" });
+    const cfg = await res.json();
+
+    cfg.price_eur = parseFloat(cfg.price_eur);
+    cfg.token_amount = parseInt(cfg.token_amount);
+
+    document.getElementById("tokenAmount").innerText = cfg.token_amount.toLocaleString();
+    document.getElementById("priceAmount").innerText = `${cfg.price_eur.toFixed(2).replace('.', ',')} €`;
+
+    // === Stripe Button ===
+    document.getElementById("buyStripe").addEventListener("click", async () => {
       try {
-        // === PayConfig dynamisch aus DB laden ===
-        const res = await fetch("/api/admin/payconfig", { credentials: "include" });
-        const cfg = await res.json();
-
-        // 🔧 Sicherheit: String → Zahl konvertieren
-        cfg.price_eur = parseFloat(cfg.price_eur);
-        cfg.token_amount = parseInt(cfg.token_amount);
-
-        // === Anzeige aktualisieren ===
-        document.getElementById("tokenAmount").innerText = cfg.token_amount.toLocaleString();
-        document.getElementById("priceAmount").innerText = `${cfg.price_eur.toFixed(2).replace('.', ',')} €`;
-
-        // === Stripe Button ===
-        document.getElementById("buyStripe").addEventListener("click", async () => {
-          try {
-            const r = await fetch("/api/pay/stripe/checkout", {
-              method: "POST",
-              credentials: "include"
-            });
-            const d = await r.json();
-            if (d.ok && d.url) window.location.href = d.url;
-            else alert("Stripe-Checkout fehlgeschlagen!");
-          } catch (err) {
-            console.error("[Stripe]", err);
-            alert("Stripe-Fehler");
-          }
+        const r = await fetch("/api/pay/stripe/checkout", {
+          method: "POST",
+          credentials: "include"
         });
-
-        // === PayPal Button ===
-       document.getElementById('buyinBtnPaypal')?.addEventListener('click', async () => {
-        try {
-          console.log("🟡 PayPal Button wurde geklickt...");
-
-          const res = await fetch('/api/pay/paypal/create', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include'
-          });
-
-          console.log('🟢 Response Status:', res.status);
-          const text = await res.text();
-          console.log('🧾 Response Body:', text);
-
-          let data;
-          try {
-            data = JSON.parse(text);
-          } catch (err) {
-            console.error("⚠️ JSON Parse Error:", err);
-            alert("PayPal Antwort unlesbar!");
-            return;
-          }
-
-          if (data.ok && data.approve_url) {
-            console.log("✅ Weiterleitung zu PayPal:", data.approve_url);
-            window.location.href = data.approve_url;
-          } else {
-            console.warn("❌ Kein approve_url erhalten!", data);
-            alert("PayPal-Checkout fehlgeschlagen!");
-          }
-        } catch (err) {
-          console.error("💥 Fetch Error:", err);
-          alert("PayPal-Fehler");
-        }
-      });
-
-
+        const d = await r.json();
+        if (d.ok && d.url) window.location.href = d.url;
+        else alert("Stripe-Checkout fehlgeschlagen!");
       } catch (err) {
-        console.error("Fehler beim Laden der PayConfig:", err);
-        alert("Konnte Preis-/Token-Daten nicht laden!");
+        console.error("[Stripe]", err);
+        alert("Stripe-Fehler");
       }
     });
-  </script>
+
+    // === PayPal Button ===
+    const btn = document.getElementById('buyPaypal');
+    if (!btn) {
+      console.error("❌ Kein PayPal-Button gefunden!");
+      return;
+    }
+
+    console.log("✅ PayPal-Button erkannt, warte auf Klick...");
+
+    btn.addEventListener('click', async () => {
+      try {
+        console.log("🟡 PayPal Button wurde geklickt...");
+
+        const res = await fetch('/api/pay/paypal/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+
+        console.log('🟢 Response Status:', res.status);
+        const text = await res.text();
+        console.log('🧾 Response Body:', text);
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (err) {
+          console.error("⚠️ JSON Parse Error:", err);
+          alert("PayPal Antwort unlesbar!");
+          return;
+        }
+
+        if (data.ok && data.approve_url) {
+          console.log("✅ Weiterleitung zu PayPal:", data.approve_url);
+          window.location.href = data.approve_url;
+        } else {
+          console.warn("❌ Kein approve_url erhalten!", data);
+          alert("PayPal-Checkout fehlgeschlagen!");
+        }
+      } catch (err) {
+        console.error("💥 Fetch Error:", err);
+        alert("PayPal-Fehler");
+      }
+    });
+
+  } catch (err) {
+    console.error("Fehler beim Laden der PayConfig:", err);
+    alert("Konnte Preis-/Token-Daten nicht laden!");
+  }
+});
+</script>
 
   <style>
     body {
