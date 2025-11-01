@@ -60,9 +60,10 @@
               credentials: 'include'
             });
 
-            const d = await r.json();
-            if (d.ok && d.approvalUrl) window.location.href = d.approvalUrl;
+            const d = await res.json();  // ✅ richtige Variable!
+            if (d.ok && d.approve_url) window.location.href = d.approve_url;
             else alert("PayPal-Checkout fehlgeschlagen!");
+
           } catch (err) {
             console.error("[PayPal]", err);
             alert("PayPal-Fehler");
