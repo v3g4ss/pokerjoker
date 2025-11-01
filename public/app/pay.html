@@ -54,10 +54,12 @@
         // === PayPal Button ===
         document.getElementById("buyPaypal").addEventListener("click", async () => {
           try {
-            const r = await fetch("/api/paypal/create-order", {
-              method: "POST",
-              credentials: "include"
+            const res = await fetch('/api/pay/paypal/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include'
             });
+
             const d = await r.json();
             if (d.ok && d.approvalUrl) window.location.href = d.approvalUrl;
             else alert("PayPal-Checkout fehlgeschlagen!");
