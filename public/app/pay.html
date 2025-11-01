@@ -52,23 +52,42 @@
         });
 
         // === PayPal Button ===
-        document.getElementById("buyPaypal").addEventListener("click", async () => {
+       document.getElementById('buyinBtnPaypal')?.addEventListener('click', async () => {
+        try {
+          console.log("🟡 PayPal Button wurde geklickt...");
+
+          const res = await fetch('/api/pay/paypal/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include'
+          });
+
+          console.log('🟢 Response Status:', res.status);
+          const text = await res.text();
+          console.log('🧾 Response Body:', text);
+
+          let data;
           try {
-            const res = await fetch('/api/pay/paypal/create', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include'
-            });
-
-            const d = await res.json();  // ✅ richtige Variable!
-            if (d.ok && d.approve_url) window.location.href = d.approve_url;
-            else alert("PayPal-Checkout fehlgeschlagen!");
-
+            data = JSON.parse(text);
           } catch (err) {
-            console.error("[PayPal]", err);
-            alert("PayPal-Fehler");
+            console.error("⚠️ JSON Parse Error:", err);
+            alert("PayPal Antwort unlesbar!");
+            return;
           }
-        });
+
+          if (data.ok && data.approve_url) {
+            console.log("✅ Weiterleitung zu PayPal:", data.approve_url);
+            window.location.href = data.approve_url;
+          } else {
+            console.warn("❌ Kein approve_url erhalten!", data);
+            alert("PayPal-Checkout fehlgeschlagen!");
+          }
+        } catch (err) {
+          console.error("💥 Fetch Error:", err);
+          alert("PayPal-Fehler");
+        }
+      });
+
 
       } catch (err) {
         console.error("Fehler beim Laden der PayConfig:", err);
