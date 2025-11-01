@@ -5,7 +5,6 @@ const paypal  = require('@paypal/checkout-server-sdk');
 const { pool } = require('../db');
 const requireAuth = require('../middleware/requireAuth');
 
-
 // === PayPal SDK-Client ===
 function client() {
   const envName = String(process.env.PAYPAL_ENV || 'sandbox').toLowerCase();
@@ -37,13 +36,17 @@ router.post('/paypal/create', requireAuth, async (req, res) => {
     const base = process.env.APP_BASE_URL || 'http://localhost:5000';
     const request = new paypal.orders.OrdersCreateRequest();
 
+    // ✅ Preis sauber umwandeln (String → Zahl)
+    const price = parseFloat(cfg.price_eur || 0);
+    if (isNaN(price) || price <= 0) throw new Error('Ungültiger Preiswert');
+
     request.requestBody({
       intent: 'CAPTURE',
       purchase_units: [
         {
           amount: {
             currency_code: 'EUR',
-            value: cfg.price_eur.toFixed(2)
+            value: price.toFixed(2)
           },
           description: `Poker Joker – ${cfg.token_amount.toLocaleString()} Tokens`,
           custom_id: JSON.stringify({
@@ -52,7 +55,6 @@ router.post('/paypal/create', requireAuth, async (req, res) => {
           }),
         },
       ],
-
       application_context: {
         brand_name: 'Poker Joker',
         landing_page: 'NO_PREFERENCE',
@@ -63,8 +65,7 @@ router.post('/paypal/create', requireAuth, async (req, res) => {
     });
 
     const order = await client().execute(request);
-
-    console.log('[PayPal ORDER RESULT]', JSON.stringify(order.result, null, 2)); // 🧩 Debug-Ausgabe!
+    console.log('[PayPal ORDER RESULT]', JSON.stringify(order.result, null, 2));
 
     const approve = order.result?.links?.find(l => l.rel === 'approve')?.href;
 
@@ -112,7 +113,7 @@ router.get('/paypal/capture', async (req, res) => {
     }
 
     const userId = Number(meta?.user_id || 0);
-    const delta  = Number(meta?.tokens  || PRODUCT.token_delta || 0);
+    const delta  = Number(meta?.tokens || 0);
     if (!(userId > 0 && delta > 0)) {
       console.warn('[PayPal] Capture ohne valide Meta:', meta);
       return res.redirect('/app/pay-success.html');
