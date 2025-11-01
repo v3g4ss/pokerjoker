@@ -26,6 +26,10 @@ app.post(
   pay.stripeWebhook
 );
 
+// --- PayPal Routes ---
+const paypalRouter = require('./routes/paypal');
+app.use('/api/pay', paypalRouter);
+
 // --- Middleware ---
 app.use(cors({
   origin: ['https://poker-joker.tech', 'https://www.poker-joker.tech'],
