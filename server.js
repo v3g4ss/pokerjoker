@@ -8,6 +8,7 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const http = require('http');
+const compression = require('compression');
 const { pool } = require('./db');
 const { sendMailSafe: sendMail } = require('./utils/mailer');
 const requireAuth = require('./middleware/requireAuth');
@@ -36,6 +37,7 @@ app.use(cors({
 
 app.use(cookieParser()); // Cookies zuerst parsen!
 app.use(require('./middleware/logger'));
+app.use(compression()); // Gzip/Brotli Kompression
 app.use(express.json({ limit: '1mb' }));
 
 // === Session-Cookie Handling ===
@@ -101,9 +103,14 @@ app.use('/api/tokens', tokensRoutes);
 app.use('/api/auth', authRouter);
 app.use('/api/password', passwordRouter);
 
-// --- Static Files ---
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/app', express.static(path.join(__dirname, 'public', 'app')));
+// --- Static Files (mit Browser-Caching) ---
+const staticOptions = {
+  maxAge: '1h',           // Browser cached 1 Stunde
+  etag: true,            // ETag für Validierung
+  lastModified: true     // Last-Modified Header
+};
+app.use(express.static(path.join(__dirname, 'public'), staticOptions));
+app.use('/app', express.static(path.join(__dirname, 'public', 'app'), staticOptions));
 
 app.get('/admin', requireAuth, requireAdmin, (_req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'admin.html'))

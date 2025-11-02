@@ -5,7 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 const { pool } = require('../db');
 const { sendMailSafe: sendMail } = require('../utils/mailer'); // <- Brevo-Mailer
 

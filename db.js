@@ -8,7 +8,7 @@ const useSSL  = !isLocal && (process.env.PGSSL === 'true' || process.env.NODE_EN
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: useSSL ? { rejectUnauthorized: false } : false, // <— entscheidend
-  max: 10,
+  max: 25,                       // Erhöht von 10 → 25 für mehr parallele Requests
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
