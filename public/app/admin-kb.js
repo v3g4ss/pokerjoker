@@ -1,8 +1,8 @@
 // ================= Poker Joker – Knowledge Admin (Bild-Preview & Caption) =================
 
-// ---- Helpers ----
-const $  = (sel, root = document) => root.querySelector(sel);
-const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+// ---- Helpers (namespaced, um Konflikte mit jQuery/$ zu vermeiden) ----
+const pj$  = (sel, root = document) => root.querySelector(sel);
+const pj$$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -11,7 +11,7 @@ const esc = (s) => String(s ?? '')
 
 function toast(msg, ok = true) {
   console[ok ? 'log' : 'warn'](`[KB] ${msg}`);
-  let el = $('#kbToast');
+  let el = pj$('#kbToast');
   if (!el) {
     el = document.createElement('div');
     el.id = 'kbToast';
@@ -63,7 +63,6 @@ async function fetchDocs() {
   try {
     return await api('GET', `/api/admin/kb/list?${q.toString()}`);
   } catch {
-    // harter Fallback
     return await api('GET', `/api/admin/kb/docs?${q.toString()}`);
   }
 }
@@ -114,16 +113,16 @@ function renderRows(items = []) {
   }).join('');
 
   // Interaktionen je Row
-  elTBody.querySelectorAll('tr').forEach(tr => {
+  pj$$('tr', elTBody).forEach(tr => {
     const id   = Number(tr.dataset.id);
-    const chk  = tr.querySelector('input[type="checkbox"]');
-    const inc  = tr.querySelector('.kbPrioInc');
-    const dec  = tr.querySelector('.kbPrioDec');
-    const prio = tr.querySelector('.prio');
-    const save = tr.querySelector('.kbSave');
-    const del  = tr.querySelector('.kbDelete');
-    const cap  = tr.querySelector('.kbCaption');
-    const img  = tr.querySelector('img.kb-thumb');
+    const chk  = pj$('input[type="checkbox"]', tr);
+    const inc  = pj$('.kbPrioInc', tr);
+    const dec  = pj$('.kbPrioDec', tr);
+    const prio = pj$('.prio', tr);
+    const save = pj$('.kbSave', tr);
+    const del  = pj$('.kbDelete', tr);
+    const cap  = pj$('.kbCaption', tr);
+    const img  = pj$('img.kb-thumb', tr);
 
     if (img) img.addEventListener('click', () => window.open(img.getAttribute('data-full'), '_blank'));
 
@@ -145,8 +144,8 @@ function renderRows(items = []) {
 
     if (save) save.addEventListener('click', async () => {
       const body = {
-        title:    tr.querySelector('.title')?.textContent.trim() || '',
-        category: tr.querySelector('.cat')?.textContent.trim()   || null,
+        title:    pj$('.title', tr)?.textContent.trim() || '',
+        category: pj$('.cat', tr)?.textContent.trim()   || null,
       };
       if (cap) body.caption = cap.value.trim();
       try { await api('PATCH', `/api/admin/kb/${id}`, body); toast(`Gespeichert (#${id})`); await reloadList(); }
@@ -165,7 +164,7 @@ async function reloadList() {
   try {
     const data = await fetchDocs();
     renderRows(data.items || []);
-    const t = $('#kbTotal'); if (t) t.textContent = data.total ?? (data.items?.length || 0);
+    const t = pj$('#kbTotal'); if (t) t.textContent = data.total ?? (data.items?.length || 0);
   } catch (e) { toast(e.message, false); }
 }
 
@@ -197,15 +196,15 @@ async function handleUpload() {
 
 // ---- INIT ----
 document.addEventListener('DOMContentLoaded', async () => {
-  elTitle     = $('#kbTitle');
-  elCat       = $('#kbCategory');
-  elTags      = $('#kbTags');
-  elCaption   = $('#kbCaption');
-  elFile      = $('#kbFile');
-  elBtnUpload = $('#kbUploadBtn');
-  elSearch    = $('#kbSearch');
-  elCatFilter = $('#kbCatFilter');
-  elTBody     = $('#kbTableBody');
+  elTitle     = pj$('#kbTitle');
+  elCat       = pj$('#kbCategory');
+  elTags      = pj$('#kbTags');
+  elCaption   = pj$('#kbCaption');
+  elFile      = pj$('#kbFile');
+  elBtnUpload = pj$('#kbUploadBtn');
+  elSearch    = pj$('#kbSearch');
+  elCatFilter = pj$('#kbCatFilter');
+  elTBody     = pj$('#kbTableBody');
 
   elBtnUpload?.addEventListener('click', handleUpload);
   elSearch?.addEventListener('input', e => { state.q = e.target.value.trim(); state.page = 1; reloadList(); });
