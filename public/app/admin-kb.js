@@ -60,18 +60,18 @@ async function fetchDocs() {
   if (state.q)  q.set('q', state.q);
   if (state.cat) q.set('category', state.cat);
 
-  // bevorzugt /kb/list, Fallback /kb/docs (Alias im Backend vorhanden)
   try {
     return await api('GET', `/api/admin/kb/list?${q.toString()}`);
   } catch {
+    // harter Fallback
     return await api('GET', `/api/admin/kb/docs?${q.toString()}`);
   }
 }
 
 function renderRows(items = []) {
+  if (!elTBody) return; // Guard
   elTBody.innerHTML = items.map(d => {
     const idActive = `kb_enabled_${d.id}`;
-    const idPrio   = `kb_prio_${d.id}`;
     const isImg    = !!d.image_url;
     const thumb    = isImg
       ? `<img src="${esc(d.image_url)}" alt="img" class="kb-thumb"
@@ -179,7 +179,7 @@ async function handleUpload() {
   if (elTitle?.value.trim())   fd.append('title',    elTitle.value.trim());
   if (elCat?.value.trim())     fd.append('category', elCat.value.trim());
   if (elTags?.value.trim())    fd.append('tags',     elTags.value.trim());
-  if (elCaption?.value.trim()) fd.append('caption',  elCaption.value.trim()); // NEU
+  if (elCaption?.value.trim()) fd.append('caption',  elCaption.value.trim());
 
   try {
     elBtnUpload.disabled = true;
@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   elTitle     = $('#kbTitle');
   elCat       = $('#kbCategory');
   elTags      = $('#kbTags');
-  elCaption   = $('#kbCaption');   // optionales Caption-Feld
+  elCaption   = $('#kbCaption');
   elFile      = $('#kbFile');
   elBtnUpload = $('#kbUploadBtn');
   elSearch    = $('#kbSearch');
