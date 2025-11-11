@@ -27,7 +27,7 @@ const TOP_K           = 6;
 
 const okStr = v => (typeof v === 'string' ? v : '');
 
-// Antwort + Usage holen
+// ========= OpenAI Call =========
 async function llmAnswer({ userText, context, systemPrompt, model, temperature }) {
   const msgs = [];
   msgs.push({ role:'system', content: systemPrompt || 'Du bist Poker Joker. Antworte knapp.' });
@@ -58,7 +58,7 @@ async function llmAnswer({ userText, context, systemPrompt, model, temperature }
   return { text, usedTokens };
 }
 
-// Zentraler Handler
+// ========= Haupt-Handler =========
 async function handleChat(req, res) {
   try {
     const uid      = req.user?.id || req.session?.user?.id;
@@ -68,6 +68,7 @@ async function handleChat(req, res) {
     if (!uid)      return res.status(401).json({ ok:false, reply:'Nicht eingeloggt.' });
     if (!userText) return res.status(400).json({ ok:false, reply:'', sources:[] });
 
+    // ===== Balance prüfen =====
     const result = await pool.query(
       `SELECT balance, purchased FROM public.v_user_balances_live WHERE user_id = $1`,
       [uid]
@@ -85,6 +86,7 @@ async function handleChat(req, res) {
       });
     }
 
+    // ===== Bot-Config =====
     const cfg   = await getBotConfig(uid);
     const mode  = (cfg?.kb_mode || 'KB_PREFERRED').toUpperCase();
     const sys   = cfg?.system_prompt || 'Du bist Poker Joker. Antworte knapp.';
@@ -94,85 +96,110 @@ async function handleChat(req, res) {
     let usedChunks = [];
     let answer     = '';
     let usedTokens = 0;
+    let imageUrls  = [];   // ⬅️ hier sammeln wir KB-Bilder
 
+    // ===== KB-Retrieval =====
     if (mode !== 'LLM_ONLY') {
       const hits = await searchChunks(userText, topK);
       const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE).slice(0, topK);
 
       if (strong.length) {
-        usedChunks = strong.map(({ id, source, title }) => ({ id, source, title }));
+        // Quellen inkl. Bild-URL/Dateiname aufbewahren
+        usedChunks = strong.map(({ id, source, title, image_url, filename, category }) => ({
+          id, source, title, image_url, filename, category
+        }));
+
+        // Alle Bild-URLs einsammeln (falls vorhanden)
+        imageUrls = strong
+          .map(h => h.image_url)
+          .filter(u => typeof u === 'string' && u.startsWith('/')) // nur lokale, von /public served
+          .slice(0, 3); // höchstens 3 Bilder mitliefern
+
+        // Kontexttext aufbauen
         let context = strong
           .map(h => h.text)
           .filter(Boolean)
           .join('\n---\n');
 
-        if (context.length > 2000) {
-          context = context.slice(0, 2000); // ✅ Kein Fehler mehr
-        }
+        if (context.length > 2000) context = context.slice(0, 2000);
 
         const out = await llmAnswer({ userText, context, systemPrompt: sys, model: mdl, temperature: temp });
         answer     = out.text;
         usedTokens = out.usedTokens;
+
+        // Wenn Bilder gefunden wurden, im Text erwähnen (Markdown) – Frontend kann zusätzlich images[] nutzen
+        if (imageUrls.length) {
+          const first = imageUrls[0];
+          // sanfter Zusatz statt Textflut
+          answer += `\n\n**Grafik:** ![](${first})`;
+        }
       }
 
       if (mode === 'KB_ONLY' && !answer) {
-        return res.json({ ok:true, reply:'Dazu finde ich nichts in der Knowledge-Base.', sources: [] });
+        return res.json({ ok:true, reply:'Dazu finde ich nichts in der Knowledge-Base.', sources: [], images: [] });
       }
     }
 
+    // ===== Fallback: reines LLM =====
     if (!answer) {
       const out = await llmAnswer({ userText, context: null, systemPrompt: sys, model: mdl, temperature: temp });
       answer     = out.text;
       usedTokens = out.usedTokens;
     }
 
-   // === Token-Verbrauch berechnen (pro Wort + Satzzeichen) ===
-const words = answer?.trim().split(/\s+/).length || 1;
-const punctCount = (answer?.match(/[.!?,;:]/g) || []).length;
-const punctRate = Number(cfg?.punct_rate ?? process.env.PUNCT_RATE ?? 1);
-const maxUsed = Number(cfg?.max_usedtokens_per_msg ?? process.env.MAX_USEDTOKENS_PER_MSG ?? 300);
+    // ===== Token-Verbrauch (deine Logik) =====
+    const words = answer?.trim().split(/\s+/).length || 1;
+    const punctCount = (answer?.match(/[.!?,;:]/g) || []).length;
+    const punctRate = Number(cfg?.punct_rate ?? process.env.PUNCT_RATE ?? 1);
+    const maxUsed   = Number(cfg?.max_usedtokens_per_msg ?? process.env.MAX_USEDTOKENS_PER_MSG ?? 300);
 
-// Verbrauch berechnen
-const baseCost = words + punctCount; // Wörter + Satzzeichen
-let toCharge = Math.min(Math.ceil(baseCost * punctRate), maxUsed);
+    const baseCost = words + punctCount; // Wörter + Satzzeichen
+    let toCharge = Math.min(Math.ceil(baseCost * punctRate), maxUsed);
 
-console.log('[DEBUG] Tokenverbrauch (pro Wort):', {
-  uid, words, punctCount, punctRate, baseCost, toCharge
-});
+    console.log('[DEBUG] Tokenverbrauch (pro Wort):', {
+      uid, words, punctCount, punctRate, baseCost, toCharge
+    });
 
-try {
-  await tokenDb.consumeTokens(uid, toCharge, `chat usage=${words} words + ${punctCount} punct ×${punctRate}`);
-} catch (e) {
-  console.error('❌ Token-Abbuchung fehlgeschlagen:', e.message);
-  return res.status(402).json({ reply: '❌ Token-Abbuchung gescheitert 😵 Buy-in nötig!' });
-}
+    try {
+      await tokenDb.consumeTokens(uid, toCharge, `chat usage=${words} words + ${punctCount} punct ×${punctRate}`);
+    } catch (e) {
+      console.error('❌ Token-Abbuchung fehlgeschlagen:', e.message);
+      return res.status(402).json({ reply: '❌ Token-Abbuchung gescheitert 😵 Buy-in nötig!' });
+    }
 
     const after  = await tokenDb.getTokens(uid);
     const newBal = after?.balance ?? (balanceNow - toCharge);
 
+    // ===== Quellen-Liste (Duplikate raus) =====
     const seen = new Set();
     const sources = (usedChunks || [])
-      .map(s => s && (s.title || s.source) || '')
-      .filter(t => t && (seen.has(t) ? false : (seen.add(t), true)))
-      .map(title => ({ title }));
+      .map(s => s && (s.title || s.source || s.filename) ? {
+        title: s.title || s.source || s.filename,
+        image_url: s.image_url || null,
+        source: s.source || null,
+        category: s.category || null
+      } : null)
+      .filter(Boolean)
+      .filter(obj => obj.title && (seen.has(obj.title) ? false : (seen.add(obj.title), true)));
 
-    // === Chat speichern ===
-    // === Verlauf speichern ===
-try {
-  await pool.query(`
-    INSERT INTO chat_history (user_id, role, message)
-    VALUES ($1, 'user', $2), ($1, 'assistant', $3)
-  `, [uid, userText, answer]);
-} catch (e) {
-  console.error('Fehler beim Speichern der Chat-History:', e.message);
-}
+    // ===== Chatverlauf speichern =====
+    try {
+      await pool.query(`
+        INSERT INTO chat_history (user_id, role, message)
+        VALUES ($1, 'user', $2), ($1, 'assistant', $3)
+      `, [uid, userText, answer]);
+    } catch (e) {
+      console.error('Fehler beim Speichern der Chat-History:', e.message);
+    }
 
+    // ===== Antwort =====
     return res.json({
       ok: true,
       reply: answer,
       balance: newBal,
       purchased,
-      sources,
+      sources,          // inkl. image_url falls vorhanden
+      images: imageUrls, // <— Frontend kann direkt anzeigen (max. 3)
       meta: { usedTokens, punctCount, punctRate, charged: toCharge }
     });
   } catch (err) {
@@ -210,4 +237,3 @@ router.post('/', requireAuth, handleChat);
 router.post('/pokerjoker', requireAuth, handleChat);
 
 module.exports = router;
-
