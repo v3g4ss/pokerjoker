@@ -1,59 +1,46 @@
 // routes/admin-kb.js
 const express = require('express');
-const multer  = require('multer');
-const path    = require('path');
-const fs      = require('fs');
-const crypto  = require('crypto');
-const pdfParse = require('pdf-parse');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 
 const { pool } = require('../db');
-const requireAuth  = require('../middleware/requireAuth');
+const requireAuth = require('../middleware/requireAuth');
 const requireAdmin = require('../middleware/requireAdmin');
 const { ingestOne } = require('../utils/knowledge');
 
 const router = express.Router();
 
-// Upload-Verzeichnis
-const uploadDir = path.join(__dirname, '..', 'uploads_tmp');
-fs.mkdirSync(uploadDir, { recursive: true });
-const upload = multer({ dest: uploadDir });
+// ===== Multer: temp upload dir =====
+const TMP = path.join(__dirname, '..', 'uploads_tmp');
+fs.mkdirSync(TMP, { recursive: true });
 
-const ALLOWED = new Set([
-  'text/plain', 'text/markdown', 'application/json',
-  'text/javascript', 'application/pdf'
-]);
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, TMP),
+    filename: (_req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_'))
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 } // 25MB
+});
 
-const countTokens = s => (s.match(/\S+/g) || []).length;
+// ===== Helpers =====
+const toArr = (csv) =>
+  (csv || '')
+    .toString()
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
 
-function chunk(text, maxLen = 1200) {
-  const out = [], lines = text.split(/\n{2,}/g);
-  let buf = [], len = 0;
-  for (const p of lines) {
-    const t = p.trim(); if (!t) continue;
-    if (len + t.length > maxLen && buf.length) {
-      out.push(buf.join('\n\n')); buf = [t]; len = t.length;
-    } else {
-      buf.push(t); len += t.length + 2;
-    }
-  }
-  if (buf.length) out.push(buf.join('\n\n'));
-  return out;
-}
+const rmSafe = (p) => {
+  try { fs.unlinkSync(p); } catch {}
+};
 
-async function fileToText(filePath, mime) {
-  if (mime === 'application/pdf') {
-    const data = await pdfParse(fs.readFileSync(filePath));
-    return data.text || '';
-  }
-  return fs.readFileSync(filePath, 'utf8');
-}
-
-// ====================== ROUTES ======================
-
-// Upload
+// ===================================================================================
+// POST /api/admin/kb/upload  (multipart/form-data; field "file")
+// Body (optional): title, category, tags (comma separated), caption
+// ===================================================================================
 router.post('/kb/upload', requireAuth, requireAdmin, upload.single('file'), async (req, res) => {
-  console.log('HIT /api/admin/kb/upload');
-  if (!req.file) return res.status(400).json({ ok:false, error:'Keine Datei hochgeladen' });
+  if (!req.file) return res.status(400).json({ ok: false, error: 'Keine Datei hochgeladen' });
 
   const tmpPath  = req.file.path;
   const original = req.file.originalname;
@@ -62,88 +49,160 @@ router.post('/kb/upload', requireAuth, requireAdmin, upload.single('file'), asyn
 
   const title    = (req.body?.title || original).toString();
   const category = (req.body?.category || '').toString().trim() || null;
-  const tagsCsv  = (req.body?.tags || '').toString().trim();
-  const tagsArr  = tagsCsv ? tagsCsv.split(',').map(s=>s.trim()).filter(Boolean) : null;
+  const tags     = toArr(req.body?.tags);
+  const caption  = (req.body?.caption || '').toString().trim();
 
   try {
-    // Buffer laden und an utils/knowledge.js delegieren
     const buffer = fs.readFileSync(tmpPath);
-    fs.unlink(tmpPath, ()=>{});
+    rmSafe(tmpPath);
 
     const out = await ingestOne({
       buffer,
       filename: original,
       mime,
       category,
-      tags: tagsArr,
+      tags,
       title
     });
 
-    // Bild: { id, image: '/uploads/knowledge/...' }
-    // Text: { id, chunks: N }
-    res.json({ ok: true, ...out, filename: original, size });
+    // Falls Bild: optionale Caption speichern
+    if (out?.id && out?.image && caption) {
+      await pool.query(
+        'UPDATE knowledge_docs SET image_caption=$1 WHERE id=$2',
+        [caption, out.id]
+      );
+    }
+
+    res.json({
+      ok: true,
+      id: out?.id,
+      chunks: out?.chunks ?? 0,
+      image: out?.image || null,
+      filename: original,
+      size
+    });
   } catch (err) {
-    console.error('KB upload error:', err);
-    try { fs.unlinkSync(tmpPath); } catch {}
-    res.status(500).json({ ok:false, error: err.message });
+    rmSafe(tmpPath);
+    console.error('[KB upload] error:', err);
+    res.status(500).json({ ok: false, error: err.message || 'Upload fehlgeschlagen' });
   }
 });
 
-// List (optional Suche + Kategorie)
-router.get('/kb/docs', requireAuth, requireAdmin, async (req, res) => {
-  console.log('HIT /api/admin/kb/docs');
-  const q   = (req.query.q || '').toString().trim();
-  const cat = (req.query.cat || '').toString().trim();
-  const where = [], vals = []; let i = 1;
+// ===================================================================================
+// GET /api/admin/kb/list?page=1&limit=20&q=term
+// einfache Liste mit Pagination + Suchfilter (title/filename/tags/category)
+// ===================================================================================
+router.get('/kb/list', requireAuth, requireAdmin, async (req, res) => {
+  const page  = Math.max(parseInt(req.query.page || '1', 10), 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 100);
+  const off   = (page - 1) * limit;
+  const q     = (req.query.q || '').toString().trim();
 
-  if (q)   { where.push(`(title ILIKE $${i} OR filename ILIKE $${i})`); vals.push(`%${q}%`); i++; }
-  if (cat) { where.push(`(category = $${i})`); vals.push(cat); i++; }
+  try {
+    const params = [];
+    let where = '1=1';
 
-  const sql = `
-    SELECT id, title, filename, mime, size_bytes, enabled, priority, category, tags, created_at
-    FROM knowledge_docs
-    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-    ORDER BY created_at DESC
-    LIMIT 500
-  `;
-  const { rows } = await pool.query(sql, vals);
-  res.json({ ok:true, items: rows });
+    if (q) {
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+      where += ` AND (title ILIKE $${params.length - 3}
+                 OR filename ILIKE $${params.length - 2}
+                 OR COALESCE(array_to_string(tags, ','),'') ILIKE $${params.length - 1}
+                 OR COALESCE(category,'') ILIKE $${params.length})`;
+    }
+
+    const { rows: items } = await pool.query(
+      `
+      SELECT id, title, filename, mime, size_bytes, category, tags,
+             enabled, priority, image_url, image_caption, created_at
+      FROM knowledge_docs
+      WHERE ${where}
+      ORDER BY id DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      `,
+      [...params, limit, off]
+    );
+
+    const { rows: [{ count }] } = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM knowledge_docs WHERE ${where}`,
+      params
+    );
+
+    res.json({ ok: true, items, total: count, page, limit });
+  } catch (err) {
+    console.error('[KB list] error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
-// Toggle aktiv / prio ändern
-router.patch('/kb/doc/:id', requireAuth, requireAdmin, async (req, res) => {
+// ===================================================================================
+// PATCH /api/admin/kb/:id
+// Body: enabled?, priority?, title?, category?, caption?, tags?
+// ===================================================================================
+router.patch('/kb/:id', requireAuth, requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const { enabled, priority } = req.body || {};
-  if (!id) return res.status(400).json({ ok:false, error:'Bad ID' });
+  if (!id) return res.status(400).json({ ok: false, error: 'Ungültige ID' });
 
-  const sets = [], vals = []; let i = 1;
-  if (typeof enabled === 'boolean') { sets.push(`enabled=$${i++}`); vals.push(enabled); }
-  if (Number.isFinite(priority))    { sets.push(`priority=$${i++}`); vals.push(priority); }
-  if (!sets.length) return res.json({ ok:true });
+  const fields = [];
+  const values = [];
+  let p = 1;
 
-  vals.push(id);
-  await pool.query(`UPDATE knowledge_docs SET ${sets.join(', ')} WHERE id=$${i}`, vals);
-  res.json({ ok:true });
+  const push = (col, val) => { fields.push(`${col}=$${p++}`); values.push(val); };
+
+  if (typeof req.body?.enabled === 'boolean') push('enabled', req.body.enabled);
+  if (req.body?.priority !== undefined) push('priority', parseInt(req.body.priority || 0, 10));
+  if (req.body?.title !== undefined) push('title', String(req.body.title || ''));
+  if (req.body?.category !== undefined) push('category', req.body.category ? String(req.body.category) : null);
+  if (req.body?.caption !== undefined) push('image_caption', String(req.body.caption || ''));
+  if (req.body?.tags !== undefined) push('tags', Array.isArray(req.body.tags) ? req.body.tags : toArr(req.body.tags));
+
+  if (!fields.length) return res.json({ ok: true, updated: 0 });
+
+  try {
+    values.push(id);
+    const { rowCount } = await pool.query(
+      `UPDATE knowledge_docs SET ${fields.join(', ')} WHERE id=$${p}`,
+      values
+    );
+    res.json({ ok: true, updated: rowCount });
+  } catch (err) {
+    console.error('[KB patch] error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
-// Reindex: tsv neu berechnen
-router.post('/kb/reindex', requireAuth, requireAdmin, async (_req, res) => {
-  await pool.query(`UPDATE knowledge_docs SET tsv = to_tsvector('german', content)`);
-  await pool.query(`UPDATE knowledge_chunks SET tsv = to_tsvector('german', text)`);
-  const { rows: d } = await pool.query(`SELECT COUNT(*)::int AS c FROM knowledge_docs`);
-  const { rows: c } = await pool.query(`SELECT COUNT(*)::int AS c FROM knowledge_chunks`);
-  res.json({ ok:true, count_docs: d[0].c, count_chunks: c[0].c });
-});
-
-// DELETE-Route
-router.delete('/kb/doc/:id', requireAuth, requireAdmin, async (req, res) => {
+// ===================================================================================
+// DELETE /api/admin/kb/:id  (löscht Doc, Chunks und evtl. Bilddatei)
+// ===================================================================================
+router.delete('/kb/:id', requireAuth, requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  if (!id) return res.status(400).json({ ok:false, error:'Ungültige ID' });
+  if (!id) return res.status(400).json({ ok: false, error: 'Ungültige ID' });
 
-  await pool.query('DELETE FROM knowledge_chunks WHERE doc_id=$1', [id]);
-  await pool.query('DELETE FROM knowledge_docs WHERE id=$1', [id]);
+  try {
+    // hole image_url für Dateilöschung
+    const { rows } = await pool.query(
+      'SELECT image_url FROM knowledge_docs WHERE id=$1',
+      [id]
+    );
+    const img = rows[0]?.image_url;
 
-  res.json({ ok:true });
+    // Chunks -> Doc löschen
+    await pool.query('BEGIN');
+    await pool.query('DELETE FROM knowledge_chunks WHERE doc_id=$1', [id]);
+    const { rowCount } = await pool.query('DELETE FROM knowledge_docs WHERE id=$1', [id]);
+    await pool.query('COMMIT');
+
+    // Bilddatei lokal entfernen
+    if (img && img.startsWith('/uploads/knowledge/')) {
+      const full = path.join(__dirname, '..', 'public', img);
+      rmSafe(full);
+    }
+
+    res.json({ ok: true, deleted: rowCount });
+  } catch (err) {
+    await pool.query('ROLLBACK').catch(() => {});
+    console.error('[KB delete] error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 module.exports = router;
