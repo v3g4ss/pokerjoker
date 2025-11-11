@@ -9,6 +9,7 @@ const pdfParse = require('pdf-parse');
 const { pool } = require('../db');
 const requireAuth  = require('../middleware/requireAuth');
 const requireAdmin = require('../middleware/requireAdmin');
+const { ingestOne } = require('../utils/knowledge');
 
 const router = express.Router();
 
@@ -52,13 +53,12 @@ async function fileToText(filePath, mime) {
 // Upload
 router.post('/kb/upload', requireAuth, requireAdmin, upload.single('file'), async (req, res) => {
   console.log('HIT /api/admin/kb/upload');
-
   if (!req.file) return res.status(400).json({ ok:false, error:'Keine Datei hochgeladen' });
 
-  const tmpPath = req.file.path;
+  const tmpPath  = req.file.path;
   const original = req.file.originalname;
-  const mime = req.file.mimetype;
-  const size = req.file.size;
+  const mime     = req.file.mimetype;
+  const size     = req.file.size;
 
   const title    = (req.body?.title || original).toString();
   const category = (req.body?.category || '').toString().trim() || null;
@@ -66,42 +66,22 @@ router.post('/kb/upload', requireAuth, requireAdmin, upload.single('file'), asyn
   const tagsArr  = tagsCsv ? tagsCsv.split(',').map(s=>s.trim()).filter(Boolean) : null;
 
   try {
-    if (!ALLOWED.has(mime)) {
-      fs.unlink(tmpPath, ()=>{});
-      return res.status(400).json({ ok:false, error:`Nicht erlaubt: ${mime}` });
-    }
-
-    const text = await fileToText(tmpPath, mime);
+    // Buffer laden und an utils/knowledge.js delegieren
+    const buffer = fs.readFileSync(tmpPath);
     fs.unlink(tmpPath, ()=>{});
-    if (!text?.trim()) return res.status(400).json({ ok:false, error:'Kein extrahierbarer Text' });
 
-    const hash = crypto.createHash('sha256').update(text).digest('hex');
+    const out = await ingestOne({
+      buffer,
+      filename: original,
+      mime,
+      category,
+      tags: tagsArr,
+      title
+    });
 
-    const docSql = `
-      INSERT INTO knowledge_docs
-        (title, filename, mime, size_bytes, category, tags, language, source_url,
-         version, enabled, priority, hash, content, tsv, created_at)
-      VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,to_tsvector('german',$13),NOW())
-      RETURNING id
-    `;
-    const docVals = [
-      title, original, mime, size, category, tagsArr,
-      null, null, 1, true, 0, hash, text
-    ];
-    const { rows } = await pool.query(docSql, docVals);
-    const docId = rows[0].id;
-
-    const parts = chunk(text);
-    for (let i = 0; i < parts.length; i++) {
-      await pool.query(`
-        INSERT INTO knowledge_chunks (doc_id, ord, text, token_count, tsv)
-        VALUES ($1,$2,$3,$4,to_tsvector('german',$3))`,
-        [docId, i, parts[i], countTokens(parts[i])]
-      );
-    }
-
-    res.json({ ok:true, docId, filename:original, chunks: parts.length });
+    // Bild: { id, image: '/uploads/knowledge/...' }
+    // Text: { id, chunks: N }
+    res.json({ ok: true, ...out, filename: original, size });
   } catch (err) {
     console.error('KB upload error:', err);
     try { fs.unlinkSync(tmpPath); } catch {}
