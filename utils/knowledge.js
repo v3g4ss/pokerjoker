@@ -1,6 +1,8 @@
 // utils/knowledge.js
 const crypto = require('crypto');
 const { pool } = require('../db');
+const fs   = require('fs');
+const path = require('path');
 
 // optionale Parser „best effort“
 const { JSDOM } = (() => { try { return require('jsdom'); } catch { return {}; } })();
@@ -80,44 +82,66 @@ async function extractText(buffer, filename, mime = '') {
 // ===== Ingestion =====
 async function ingestOne({ buffer, filename, mime, category, tags, title }) {
   const hash = sha(buffer);
+  const e = ext(filename || '');
+  const isImage = ['png', 'jpg', 'jpeg'].includes(e);
+  const normTags = (Array.isArray(tags) && tags.length) ? tags : null;
 
-  // 1) Duplikate früh rausschmeißen (schnell & spart RAM)
-  const d = await pool.query('SELECT id FROM knowledge_docs WHERE hash=$1', [hash]);
-  if (d.rows[0]) return { id: d.rows[0].id, skipped: true };
+  // === Dedupe für ALLE Typen (auch Bilder) ===
+  const dupe = await pool.query('SELECT id FROM knowledge_docs WHERE hash=$1', [hash]);
+  if (dupe.rows[0]) return { id: dupe.rows[0].id, skipped: true };
 
-  // 2) Text extrahieren
-  let content = await extractText(buffer, filename, mime) || '';
+  // === Bild: nur Datei speichern + Metadaten in DB, KEIN Binary/Text in DB ===
+  if (isImage || (mime && mime.startsWith('image/'))) {
+    const imgName = `${Date.now()}-${String(filename).replace(/\s+/g, '_')}`;
+    const relPath = `/uploads/knowledge/${imgName}`;
+    const absPath = path.join(__dirname, '..', 'public', relPath);
 
-  // 3) Vor dem Chunking hart deckeln
-  if (content.length > MAX_TEXT_CHARS) {
-    content = content.slice(0, MAX_TEXT_CHARS);
+    fs.mkdirSync(path.dirname(absPath), { recursive: true });
+    fs.writeFileSync(absPath, buffer);
+
+    const { rows } = await pool.query(`
+      INSERT INTO knowledge_docs
+        (title, filename, mime, size_bytes, category, tags, hash, image_url, created_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+      RETURNING id
+    `, [
+      title || filename,
+      filename,
+      mime || `image/${e || 'png'}`,
+      buffer.length,
+      category || null,
+      normTags,
+      hash,
+      relPath
+    ]);
+
+    return { id: rows[0].id, image: relPath };
   }
 
-  const size_bytes = buffer.length;
+  // === Text-/Dok-Formate wie gehabt ===
+  let content = await extractText(buffer, filename, mime) || '';
+  if (content.length > MAX_TEXT_CHARS) content = content.slice(0, MAX_TEXT_CHARS);
 
-  // 4) Secret-Hinweis (nur Log)
   if (looksSecret(content)) console.warn('[knowledge] possible secret in', filename);
 
-  // 5) Doc speichern
   const ins = await pool.query(
     `INSERT INTO knowledge_docs
-       (title, filename, mime, size_bytes, category, tags, hash, content)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       (title, filename, mime, size_bytes, category, tags, hash, content, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
      RETURNING id`,
     [
       title || filename,
       filename,
       mime || '',
-      size_bytes,
+      buffer.length,
       category || null,
-      (Array.isArray(tags) && tags.length) ? tags : null,
+      normTags,
       hash,
       content
     ]
   );
   const doc_id = ins.rows[0].id;
 
-  // 6) Chunking + Insert (transaktional)
   const chunks = chunkify(content);
   const client = await pool.connect();
   try {
