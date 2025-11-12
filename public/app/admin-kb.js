@@ -41,59 +41,85 @@
   }
 
   function render(items){
-    if(!elTableBody) return;
-    if(!items.length){
-      elTableBody.innerHTML = `<tr><td colspan="8" style="opacity:.7">Keine Einträge gefunden.</td></tr>`;
-      return;
-    }
-    elTableBody.innerHTML = items.map(d=>{
-      const isImg = !!d.image_url;
-      const thumb = isImg
-        ? `<img src="${esc(d.image_url)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:8px;cursor:pointer" data-full="${esc(d.image_url)}">`
-        : `<span class="mono">${esc((d.mime||'').split('/')[1] || 'txt')}</span>`;
-      return `
-        <tr data-id="${d.id}">
-          <td class="mono">${d.id}</td>
-          <td class="title">${esc(d.title||'')}</td>
-          <td>${thumb}<div class="mono" style="font-size:.85rem;opacity:.7">${esc(d.filename||'')}</div></td>
-          <td class="cat">${esc(d.category||'')}</td>
-          <td class="tags">${esc(Array.isArray(d.tags)? d.tags.join(', '):(d.tags||''))}</td>
-          <td class="mono">${fmtSize(d.size_bytes)}</td>
-          <td><input type="checkbox" class="kb-enabled" ${d.enabled?'checked':''}></td>
-          <td>
-            <button class="kbSave">💾</button>
-            <button class="kbDelete">🗑️</button>
-          </td>
-        </tr>`;
-    }).join('');
-
-    // Events
-    qq('tr', elTableBody).forEach(tr=>{
-      const id = +tr.dataset.id;
-      const img = q('img[data-full]', tr);
-      img?.addEventListener('click', ()=> window.open(img.getAttribute('data-full'), '_blank'));
-
-      q('.kb-enabled', tr)?.addEventListener('change', async (e)=>{
-        try{ await api('PATCH', `/api/admin/kb/${id}`, { enabled: e.target.checked }); toast(`Doc #${id} ${e.target.checked?'aktiviert':'deaktiviert'}`); }
-        catch(err){ toast(err.message, false); }
-      });
-
-      q('.kbSave', tr)?.addEventListener('click', async ()=>{
-        const body = {
-          title:    q('.title', tr)?.textContent.trim() || '',
-          category: q('.cat', tr)?.textContent.trim()   || null,
-        };
-        try{ await api('PATCH', `/api/admin/kb/${id}`, body); toast(`Gespeichert (#${id})`); }
-        catch(err){ toast(err.message, false); }
-      });
-
-      q('.kbDelete', tr)?.addEventListener('click', async ()=>{
-        if(!confirm(`Wirklich löschen (#${id})?`)) return;
-        try{ await api('DELETE', `/api/admin/kb/${id}`); tr.remove(); toast(`Gelöscht (#${id})`); }
-        catch(err){ toast(err.message, false); }
-      });
-    });
+  if(!elTableBody) return;
+  if(!items.length){
+    elTableBody.innerHTML = `<tr><td colspan="9" style="opacity:.7">Keine Einträge gefunden.</td></tr>`;
+    return;
   }
+  elTableBody.innerHTML = items.map(d=>{
+    const isImg = !!d.image_url;
+    const thumb = isImg
+      ? `<img src="${esc(d.image_url)}" alt="" class="kb-thumb"
+             style="width:48px;height:48px;object-fit:cover;border-radius:8px;cursor:pointer"
+             data-full="${esc(d.image_url)}">`
+      : `<span class="mono">${esc((d.mime||'').split('/')[1] || 'txt')}</span>`;
+    return `
+      <tr data-id="${d.id}">
+        <td class="mono col-id">${d.id}</td>
+        <td class="title col-title">${esc(d.title||'')}</td>
+        <td class="col-file">
+          ${thumb}
+          <div class="mono filename">${esc(d.filename||'')}</div>
+        </td>
+        <td class="cat col-cat">${esc(d.category||'')}</td>
+        <td class="tags col-tags">${esc(Array.isArray(d.tags)? d.tags.join(', '):(d.tags||''))}</td>
+        <td class="size col-size mono">${fmtSize(d.size_bytes)}</td>
+        <td class="col-aktiv">
+          <input type="checkbox" class="kb-enabled" ${d.enabled?'checked':''}>
+        </td>
+        <td class="col-prio">
+          <div class="prio-wrap">
+            <button class="kbPrioDec" title="Prio -1">–</button>
+            <span class="mono prio">P:${d.priority ?? 0}</span>
+            <button class="kbPrioInc" title="Prio +1">+</button>
+          </div>
+        </td>
+        <td class="col-actions">
+          <button class="kbSave"   title="Speichern">💾</button>
+          <button class="kbDelete" title="Löschen">🗑️</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  // Events
+  qq('tr', elTableBody).forEach(tr=>{
+    const id = +tr.dataset.id;
+    const img = q('img[data-full]', tr);
+    img?.addEventListener('click', ()=> window.open(img.getAttribute('data-full'), '_blank'));
+
+    q('.kb-enabled', tr)?.addEventListener('change', async (e)=>{
+      try{ await api('PATCH', `/api/admin/kb/${id}`, { enabled: e.target.checked }); toast(`Doc #${id} ${e.target.checked?'aktiviert':'deaktiviert'}`); }
+      catch(err){ toast(err.message, false); }
+    });
+
+    q('.kbPrioInc', tr)?.addEventListener('click', async ()=>{
+      const p = Number(q('.prio', tr).textContent.replace('P:','')) || 0;
+      try{ await api('PATCH', `/api/admin/kb/${id}`, { priority: p+1 }); await loadList(); }
+      catch(err){ toast(err.message, false); }
+    });
+
+    q('.kbPrioDec', tr)?.addEventListener('click', async ()=>{
+      const p = Number(q('.prio', tr).textContent.replace('P:','')) || 0;
+      try{ await api('PATCH', `/api/admin/kb/${id}`, { priority: p-1 }); await loadList(); }
+      catch(err){ toast(err.message, false); }
+    });
+
+    q('.kbSave', tr)?.addEventListener('click', async ()=>{
+      const body = {
+        title:    q('.title', tr)?.textContent.trim() || '',
+        category: q('.cat', tr)?.textContent.trim()   || null,
+      };
+      try{ await api('PATCH', `/api/admin/kb/${id}`, body); toast(`Gespeichert (#${id})`); }
+      catch(err){ toast(err.message, false); }
+    });
+
+    q('.kbDelete', tr)?.addEventListener('click', async ()=>{
+      if(!confirm(`Wirklich löschen (#${id})?`)) return;
+      try{ await api('DELETE', `/api/admin/kb/${id}`); tr.remove(); toast(`Gelöscht (#${id})`); }
+      catch(err){ toast(err.message, false); }
+    });
+  });
+}
 
   // --- Upload (PINNED: /api/admin/kb/upload) ---
   async function handleUpload(){

@@ -1,6 +1,7 @@
 // routes/admin-kb.js
 const express = require('express');
 const fs = require('fs');
+const fsp = require('fs/promises');
 const path = require('path');
 const multer = require('multer');
 
@@ -33,6 +34,53 @@ const toArr = (csv) =>
     .filter(Boolean);
 
 const rmSafe = (p) => { try { fs.unlinkSync(p); } catch {} };
+
+/** Normalisiert einen DB-Relativpfad wie '/uploads/knowledge/...' zu 'uploads/knowledge/...'
+ * damit path.join nicht auf Root springt. */
+function normalizeRel(rel) {
+  return String(rel || '').replace(/^\/+/, '');
+}
+
+/** Lese image_url & enabled für ein Doc */
+async function getDocImageMeta(id) {
+  const { rows } = await pool.query(
+    'SELECT image_url, enabled FROM knowledge_docs WHERE id = $1',
+    [id]
+  );
+  return rows[0] || null;
+}
+
+// ===================================================================================
+// PUBLIC: GET /api/admin/kb/img/:id  -> liefert Bilddatei per stabiler ID-URL
+//  - kein requireAuth/Admin: soll im Live-Bot/Frontend eingebettet werden können
+//  - liefert 404, wenn Doc nicht existiert, nicht enabled oder kein image_url
+// ===================================================================================
+router.get('/kb/img/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).send('Bad Request');
+
+  try {
+    const meta = await getDocImageMeta(id);
+    if (!meta || !meta.enabled || !meta.image_url) {
+      return res.status(404).send('Not found');
+    }
+
+    const rel = normalizeRel(meta.image_url); // 'uploads/knowledge/...'
+    const abs = path.join(__dirname, '..', 'public', rel);
+
+    // Existenz prüfen (saubereres 404)
+    try {
+      await fsp.access(abs);
+    } catch {
+      return res.status(404).send('Not found');
+    }
+
+    return res.sendFile(abs);
+  } catch (e) {
+    console.error('[KB img] error:', e);
+    return res.status(500).send('Server error');
+  }
+});
 
 // ===================================================================================
 // POST /api/admin/kb/upload   (multipart/form-data; field "file")
@@ -115,6 +163,7 @@ async function listHandler(req, res) {
     if (q) {
       // title / filename / tags / category
       params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+      //         t                f                tags                   category
       where += ` AND (
         title ILIKE $${params.length - 3}
         OR filename ILIKE $${params.length - 2}
@@ -205,7 +254,8 @@ router.delete('/kb/:id', requireAuth, requireAdmin, async (req, res) => {
     await pool.query('COMMIT');
 
     if (img && img.startsWith('/uploads/knowledge/')) {
-      const full = path.join(__dirname, '..', 'public', img);
+      const rel = normalizeRel(img);
+      const full = path.join(__dirname, '..', 'public', rel);
       rmSafe(full);
     }
 
