@@ -1,5 +1,3 @@
-// ================= Poker Joker – Knowledge Admin (schlichte Tabelle + endgültiger $-Fix) =================
-
 // ---- Safe Selector Fallback ----
 if (typeof window.$ === "undefined") {
   window.$ = (sel, root = document) => root.querySelector(sel);
