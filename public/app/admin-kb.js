@@ -32,23 +32,21 @@ function toast(msg, ok = true) {
   toast._t = setTimeout(() => { el.style.display = 'none'; }, 2200);
 }
 
-// ---- API ----
-async function api(method, url, body, isForm = false) {
+// ---- Lokale API-Hilfsfunktion (nicht global überschreiben) ----
+const kbApi = async (method, url, body, isForm = false) => {
   const opt = { method, credentials: 'include', headers: {} };
   if (body && !isForm) {
     opt.headers['Content-Type'] = 'application/json';
     opt.body = JSON.stringify(body);
   }
-  if (body && isForm) {
-    opt.body = body;
-  }
+  if (body && isForm) opt.body = body;
   const r = await fetch(url, opt);
   if (!r.ok) {
     const txt = await r.text().catch(() => '');
     throw new Error(`${r.status} ${r.statusText} ${txt}`);
   }
   return r.json().catch(() => ({}));
-}
+};
 
 // ---- Helper für Dateigröße ----
 function kbSizeLabel(d) {
