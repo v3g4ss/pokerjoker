@@ -1,4 +1,4 @@
-// public/app/admin-kb.js  (oder js/admin-kb.js – wie bei dir im Projekt)
+// public/app/admin-kb.js
 
 document.addEventListener('DOMContentLoaded', () => {
   // ==== helpers ====
@@ -37,7 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
     tb.innerHTML = '';
 
     for (const d of kbDocs) {
-      // saubere IDs/Names für Felder -> keine DevTools-Warnungen
       const idActive = `kb_active_${d.id}`;
       const idPrio   = `kb_prio_${d.id}`;
       const sz       = sizeLabel(d);
@@ -74,7 +73,6 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="mono">${esc(sz)}</td>
       `;
 
-      // Elemente referenzieren (über unsere IDs)
       const enabledBox = tr.querySelector(`#${idActive}`);
       const prioInput  = tr.querySelector(`#${idPrio}`);
       const saveBtn    = tr.querySelector('.kbSave');
@@ -86,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const enabled  = !!enabledBox?.checked;
         const priority = parseInt(prioInput?.value ?? '0', 10) || 0;
 
-        const r = await fetch(`/api/admin/kb/doc/${d.id}`, {
+        const r = await fetch(`/api/admin/kb/${d.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -103,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!confirm('Wirklich löschen?')) return;
         delBtn.disabled = true;
 
-        const r = await fetch(`/api/admin/kb/doc/${d.id}`, {
+        const r = await fetch(`/api/admin/kb/${d.id}`, {
           method: 'DELETE',
           credentials: 'include'
         });
