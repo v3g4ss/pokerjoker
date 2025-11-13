@@ -1,4 +1,4 @@
-// ================= Poker Joker – Knowledge Admin (Bild-Preview & Caption) =================
+// ================= Poker Joker – Knowledge Admin (schlichte Tabelle) =================
 
 // ---- Helpers ----
 const $  = (sel, root = document) => root.querySelector(sel);
@@ -22,7 +22,7 @@ function toast(msg, ok = true) {
   el.style.background = ok ? '#064e3b' : '#7f1d1d';
   el.style.display = 'block';
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.style.display = 'none', 2200);
+  toast._t = setTimeout(() => { el.style.display = 'none'; }, 2200);
 }
 
 // ---- API ----
@@ -43,11 +43,25 @@ async function api(method, url, body, isForm = false) {
   return r.json().catch(() => ({}));
 }
 
-// ---- State / DOM ----
-let state = { page: 1, limit: 20, q: '', cat: '' };
+// ---- Helper für Dateigröße ----
+function kbSizeLabel(d) {
+  if (d.size_label) return d.size_label;
+  if (d.size_human) return d.size_human;
+  if (d.file_size_human) return d.file_size_human;
 
-let elTitle, elCat, elTags, elCaption, elFile, elBtnUpload;
-let elSearch, elCatFilter;
+  const bytes = Number(d.size_bytes ?? d.filesize ?? d.file_size ?? d.size ?? 0);
+  if (!bytes) return '';
+  const kb = bytes / 1024;
+  if (kb < 1024) return kb.toFixed(1) + ' KB';
+  const mb = kb / 1024;
+  return mb.toFixed(2) + ' MB';
+}
+
+// ---- State / DOM ----
+let state = { page: 1, limit: 50, q: '', cat: '' };
+
+let elTitle, elCat, elTags, elFiles, elBtnUpload, elStatus;
+let elSearch, elCatFilter, elSearchBtn, elReindex, elIndexInfo;
 let elTBody;
 
 // ---- LISTE ----
@@ -58,7 +72,6 @@ async function fetchDocs() {
   if (state.q) q.set('q', state.q);
   if (state.cat) q.set('category', state.cat);
 
-  // bevorzugt /kb/list, Fallback /kb/docs (Alias im Backend vorhanden)
   try {
     return await api('GET', `/api/admin/kb/list?${q.toString()}`);
   } catch {
@@ -67,69 +80,41 @@ async function fetchDocs() {
 }
 
 function renderRows(items = []) {
+  if (!elTBody) return;
+
   elTBody.innerHTML = items.map(d => {
-    const idActive = `kb_enabled_${d.id}`;
-    const isImg    = !!d.image_url;
-
-    const thumb = isImg
-      ? `<img src="${esc(d.image_url)}" alt="img" class="kb-thumb"
-               style="width:48px;height:48px;object-fit:cover;border-radius:8px;cursor:pointer"
-               data-full="${esc(d.image_url)}">`
-      : `<span class="mono">${esc((d.mime || '').split('/')[1] || 'txt')}</span>`;
-
-    // Caption ist aktuell nur beim Upload relevant – in der Tabelle selbst
-    // zeigen wir sie (noch) nicht als eigene Spalte, um das Layout schlank zu halten.
-    const capInput = isImg
-      ? `<input type="text" class="kbCaption" value="${esc(d.image_caption || '')}"
-                placeholder="Caption (optional)" style="display:none">`
-      : '';
+    const idActive  = `kb_enabled_${d.id}`;
+    const sizeLabel = kbSizeLabel(d);
 
     return `
       <tr data-id="${d.id}">
         <td class="mono">${d.id}</td>
-        <td class="title">${esc(d.title || '')}</td>
-        <td>
-          ${thumb}
-          <div class="mono" style="font-size:.85rem;opacity:.8">${esc(d.filename || '')}</div>
-          ${capInput}
-        </td>
-        <td class="cat">${esc(d.category || '')}</td>
+        <td class="title" contenteditable="true">${esc(d.title || '')}</td>
+        <td class="file mono">${esc(d.filename || '')}</td>
+        <td class="cat" contenteditable="true">${esc(d.category || '')}</td>
         <td class="tags">${esc(Array.isArray(d.tags) ? d.tags.join(', ') : (d.tags || ''))}</td>
-        <td>
+        <td style="text-align:center;">
           <input type="checkbox" id="${idActive}" ${d.enabled ? 'checked' : ''}>
           <label for="${idActive}" class="sr-only" style="position:absolute;left:-9999px;">aktiv</label>
         </td>
         <td>
-          <div style="display:flex;gap:.35rem;align-items:center">
-            <button class="kbPrioDec" title="Prio -1">–</button>
-            <span class="mono kbPrioValue">${d.priority ?? 0}</span>
-            <button class="kbPrioInc" title="Prio +1">+</button>
-          </div>
+          <input type="number" class="kbPrioInput mono" value="${d.priority ?? 0}" style="width:70px;">
         </td>
         <td>
           <button class="kbSave"   title="Speichern">💾</button>
           <button class="kbDelete" title="Löschen">🗑️</button>
         </td>
+        <td class="mono size">${esc(sizeLabel)}</td>
       </tr>`;
   }).join('');
 
   // Interaktionen je Row
   elTBody.querySelectorAll('tr').forEach(tr => {
-    const id   = Number(tr.dataset.id);
-    const chk  = tr.querySelector('input[type="checkbox"]');
-    const inc  = tr.querySelector('.kbPrioInc');
-    const dec  = tr.querySelector('.kbPrioDec');
-    const prio = tr.querySelector('.kbPrioValue');
-    const save = tr.querySelector('.kbSave');
-    const del  = tr.querySelector('.kbDelete');
-    const cap  = tr.querySelector('.kbCaption');
-    const img  = tr.querySelector('img.kb-thumb');
-
-    if (img) {
-      img.addEventListener('click', () =>
-        window.open(img.getAttribute('data-full'), '_blank')
-      );
-    }
+    const id        = Number(tr.dataset.id);
+    const chk       = tr.querySelector('input[type="checkbox"]');
+    const prioInput = tr.querySelector('.kbPrioInput');
+    const save      = tr.querySelector('.kbSave');
+    const del       = tr.querySelector('.kbDelete');
 
     if (chk) {
       chk.addEventListener('change', async () => {
@@ -142,41 +127,30 @@ function renderRows(items = []) {
       });
     }
 
-    if (inc) {
-      inc.addEventListener('click', async () => {
-        const cur = Number(prio.textContent.trim()) || 0;
+    if (prioInput) {
+      const applyPrio = async () => {
+        const val = Number(prioInput.value);
+        if (!Number.isFinite(val)) return;
         try {
-          await api('PATCH', `/api/admin/kb/${id}`, { priority: cur + 1 });
-          await reloadList();
+          await api('PATCH', `/api/admin/kb/${id}`, { priority: val });
+          toast(`Prio gespeichert (#${id})`);
         } catch (e) {
           toast(e.message, false);
         }
-      });
-    }
-
-    if (dec) {
-      dec.addEventListener('click', async () => {
-        const cur = Number(prio.textContent.trim()) || 0;
-        try {
-          await api('PATCH', `/api/admin/kb/${id}`, { priority: cur - 1 });
-          await reloadList();
-        } catch (e) {
-          toast(e.message, false);
-        }
-      });
+      };
+      prioInput.addEventListener('change', applyPrio);
+      prioInput.addEventListener('blur', applyPrio);
     }
 
     if (save) {
       save.addEventListener('click', async () => {
         const body = {
           title:    tr.querySelector('.title')?.textContent.trim() || '',
-          category: tr.querySelector('.cat')?.textContent.trim()   || null,
+          category: tr.querySelector('.cat')?.textContent.trim()   || null
         };
-        if (cap) body.caption = cap.value.trim();
         try {
           await api('PATCH', `/api/admin/kb/${id}`, body);
           toast(`Gespeichert (#${id})`);
-          await reloadList();
         } catch (e) {
           toast(e.message, false);
         }
@@ -211,53 +185,93 @@ async function reloadList() {
 
 // ---- UPLOAD ----
 async function handleUpload() {
-  const f = elFile.files?.[0];
-  if (!f) return toast('Bitte eine Datei wählen', false);
-
-  const fd = new FormData();
-  fd.append('file', f);
-  if (elTitle?.value.trim())   fd.append('title',    elTitle.value.trim());
-  if (elCat?.value.trim())     fd.append('category', elCat.value.trim());
-  if (elTags?.value.trim())    fd.append('tags',     elTags.value.trim());
-  if (elCaption?.value.trim()) fd.append('caption',  elCaption.value.trim());
+  const files = Array.from(elFiles?.files || []);
+  if (!files.length) {
+    toast('Bitte mindestens eine Datei wählen', false);
+    return;
+  }
 
   try {
     elBtnUpload.disabled = true;
-    const res = await api('POST', '/api/admin/kb/upload', fd, true);
-    toast(`Upload OK (#${res.id}${res.image ? ' – Bild' : ''})`);
-    if (elFile) elFile.value = '';
-    if (elCaption) elCaption.value = '';
+    if (elStatus) elStatus.textContent = 'Upload läuft …';
+
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append('file', f);
+      if (elTitle?.value.trim()) fd.append('title', elTitle.value.trim());
+      if (elCat?.value.trim())   fd.append('category', elCat.value.trim());
+      if (elTags?.value.trim())  fd.append('tags', elTags.value.trim());
+
+      await api('POST', '/api/admin/kb/upload', fd, true);
+    }
+
+    toast('Upload OK');
+    if (elFiles) elFiles.value = '';
     await reloadList();
   } catch (e) {
     toast(e.message, false);
   } finally {
     elBtnUpload.disabled = false;
+    if (elStatus) elStatus.textContent = '';
+  }
+}
+
+// ---- Reindex ----
+async function handleReindex() {
+  if (!elReindex) return;
+  try {
+    elReindex.disabled = true;
+    if (elIndexInfo) elIndexInfo.textContent = 'Index wird neu aufgebaut …';
+    await api('POST', '/api/admin/kb/reindex');
+    if (elIndexInfo) elIndexInfo.textContent = 'Index aktualisiert ✔';
+    toast('Suchindex neu aufgebaut');
+  } catch (e) {
+    if (elIndexInfo) elIndexInfo.textContent = 'Fehler beim Reindex';
+    toast(e.message, false);
+  } finally {
+    elReindex.disabled = false;
+    setTimeout(() => {
+      if (elIndexInfo) elIndexInfo.textContent = '';
+    }, 3000);
   }
 }
 
 // ---- INIT ----
 document.addEventListener('DOMContentLoaded', async () => {
-  elTitle     = $('#kbTitle');
-  elCat       = $('#kbCategory');
-  elTags      = $('#kbTags');
-  elCaption   = $('#kbCaption');
-  elFile      = $('#kbFile');
-  elBtnUpload = $('#kbUploadBtn');
-  elSearch    = $('#kbSearch');
-  elCatFilter = $('#kbCatFilter');
-  elTBody     = $('#kbTableBody');
+  elTitle      = $('#kbTitle');
+  elCat        = $('#kbCategory');
+  elTags       = $('#kbTags');
+  elFiles      = $('#kbFiles');
+  elBtnUpload  = $('#kbUpload');
+  elStatus     = $('#kbStatus');
+  elSearch     = $('#kbSearch');
+  elCatFilter  = $('#kbCatFilter');
+  elSearchBtn  = $('#kbSearchBtn');
+  elReindex    = $('#kbReindex');
+  elIndexInfo  = $('#kbIndexInfo');
+  const kbTable = $('#kbTable');
+  elTBody      = kbTable ? kbTable.querySelector('tbody') : null;
 
   elBtnUpload?.addEventListener('click', handleUpload);
-  elSearch?.addEventListener('input', e => {
+
+  elSearch?.addEventListener('input', (e) => {
     state.q = e.target.value.trim();
     state.page = 1;
     reloadList();
   });
-  elCatFilter?.addEventListener('change', e => {
+
+  elCatFilter?.addEventListener('input', (e) => {
     state.cat = e.target.value.trim();
     state.page = 1;
     reloadList();
   });
+
+  elSearchBtn?.addEventListener('click', () => {
+    state.page = 1;
+    reloadList();
+  });
+
+  elReindex?.addEventListener('click', handleReindex);
 
   await reloadList();
 });
