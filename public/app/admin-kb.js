@@ -1,40 +1,39 @@
-// ================= Poker Joker – Knowledge Admin (schlichte Tabelle + eigene API) =================
-
-// ---- Safe Selector Fallback ----
-if (typeof window.$ === "undefined") {
-  window.$ = (sel, root = document) => root.querySelector(sel);
-}
-
-// ---- Safe esc() ----
-if (!window.esc) {
-  window.esc = function (s) {
-    s = s ?? '';
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  };
-}
-
-// ---- Lokale API nur für Knowledge ----
-async function kbApi(method, url, body, isForm = false) {
-  const opt = { method, credentials: 'include', headers: {} };
-  if (body && !isForm) {
-    opt.headers['Content-Type'] = 'application/json';
-    opt.body = JSON.stringify(body);
+(() => {
+  // ---- Safe Selector Fallback ----
+  if (typeof window.$ === "undefined") {
+    window.$ = (sel, root = document) => root.querySelector(sel);
   }
-  if (body && isForm) {
-    opt.body = body;
+
+  // ---- Safe esc() ----
+  if (!window.esc) {
+    window.esc = function (s) {
+      s = s ?? '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    };
   }
-  const r = await fetch(url, opt);
-  if (!r.ok) {
-    const txt = await r.text().catch(() => '');
-    throw new Error(`${r.status} ${r.statusText} ${txt}`);
+
+  // ---- Lokale API nur für Knowledge ----
+  async function kbApi(method, url, body, isForm = false) {
+    const opt = { method, credentials: 'include', headers: {} };
+    if (body && !isForm) {
+      opt.headers['Content-Type'] = 'application/json';
+      opt.body = JSON.stringify(body);
+    }
+    if (body && isForm) {
+      opt.body = body;
+    }
+    const r = await fetch(url, opt);
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      throw new Error(`${r.status} ${r.statusText} ${txt}`);
+    }
+    return r.json().catch(() => ({}));
   }
-  return r.json().catch(() => ({}));
-}
 
 // ---- Helper für Dateigröße ----
 function kbSizeLabel(d) {
@@ -284,4 +283,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   s.textContent =
     `.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`;
   document.head.appendChild(s);
+})();
 })();
