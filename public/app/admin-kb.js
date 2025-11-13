@@ -1,4 +1,10 @@
 (() => {
+  
+  // 🔒 Sicherheitsbremse – verhindert, dass KB-Code globale API überschreibt
+if (window.api) {
+  console.warn('[KB] api() existiert bereits – Knowledge-Modul nutzt eigene kbApi()!');
+}
+
   // ---- Safe Selector Fallback ----
   if (typeof window.$ === "undefined") {
     window.$ = (sel, root = document) => root.querySelector(sel);
