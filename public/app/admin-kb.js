@@ -1,7 +1,11 @@
-// ================= Poker Joker – Knowledge Admin (schlichte Tabelle) =================
+// ================= Poker Joker – Knowledge Admin (schlichte Tabelle + Fix für $) =================
+
+// ---- Safe Selector Fallback ----
+if (typeof $ === 'undefined') {
+  var $ = (sel, root = document) => root.querySelector(sel);
+}
 
 // ---- Helpers ----
-
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -251,24 +255,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   elTBody      = kbTable ? kbTable.querySelector('tbody') : null;
 
   elBtnUpload?.addEventListener('click', handleUpload);
-
   elSearch?.addEventListener('input', (e) => {
     state.q = e.target.value.trim();
     state.page = 1;
     reloadList();
   });
-
   elCatFilter?.addEventListener('input', (e) => {
     state.cat = e.target.value.trim();
     state.page = 1;
     reloadList();
   });
-
   elSearchBtn?.addEventListener('click', () => {
     state.page = 1;
     reloadList();
   });
-
   elReindex?.addEventListener('click', handleReindex);
 
   await reloadList();
