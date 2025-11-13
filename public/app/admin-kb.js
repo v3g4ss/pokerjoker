@@ -1,9 +1,11 @@
+// ================= Poker Joker – Knowledge Admin (schlichte Tabelle + eigene API) =================
+
 // ---- Safe Selector Fallback ----
 if (typeof window.$ === "undefined") {
   window.$ = (sel, root = document) => root.querySelector(sel);
 }
 
-// ---- Safe esc() ohne Neu-Deklaration ----
+// ---- Safe esc() ----
 if (!window.esc) {
   window.esc = function (s) {
     s = s ?? '';
@@ -16,44 +18,29 @@ if (!window.esc) {
   };
 }
 
-function toast(msg, ok = true) {
-  console[ok ? 'log' : 'warn'](`[KB] ${msg}`);
-  let el = $('#kbToast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'kbToast';
-    el.style.cssText = 'position:fixed;right:16px;bottom:16px;background:#1f2937;color:#e5e7eb;padding:10px 14px;border-radius:10px;opacity:.97;box-shadow:0 6px 24px #0006;z-index:9999';
-    document.body.appendChild(el);
-  }
-  el.textContent = msg;
-  el.style.background = ok ? '#064e3b' : '#7f1d1d';
-  el.style.display = 'block';
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => { el.style.display = 'none'; }, 2200);
-}
-
-// ---- Lokale API-Hilfsfunktion (nicht global überschreiben) ----
-const kbApi = async (method, url, body, isForm = false) => {
+// ---- Lokale API nur für Knowledge ----
+async function kbApi(method, url, body, isForm = false) {
   const opt = { method, credentials: 'include', headers: {} };
   if (body && !isForm) {
     opt.headers['Content-Type'] = 'application/json';
     opt.body = JSON.stringify(body);
   }
-  if (body && isForm) opt.body = body;
+  if (body && isForm) {
+    opt.body = body;
+  }
   const r = await fetch(url, opt);
   if (!r.ok) {
     const txt = await r.text().catch(() => '');
     throw new Error(`${r.status} ${r.statusText} ${txt}`);
   }
   return r.json().catch(() => ({}));
-};
+}
 
 // ---- Helper für Dateigröße ----
 function kbSizeLabel(d) {
   if (d.size_label) return d.size_label;
   if (d.size_human) return d.size_human;
   if (d.file_size_human) return d.file_size_human;
-
   const bytes = Number(d.size_bytes ?? d.filesize ?? d.file_size ?? d.size ?? 0);
   if (!bytes) return '';
   const kb = bytes / 1024;
@@ -64,10 +51,27 @@ function kbSizeLabel(d) {
 
 // ---- State / DOM ----
 let state = { page: 1, limit: 50, q: '', cat: '' };
-
 let elTitle, elCat, elTags, elFiles, elBtnUpload, elStatus;
 let elSearch, elCatFilter, elSearchBtn, elReindex, elIndexInfo;
 let elTBody;
+
+// ---- TOAST ----
+function toast(msg, ok = true) {
+  console[ok ? 'log' : 'warn'](`[KB] ${msg}`);
+  let el = $('#kbToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'kbToast';
+    el.style.cssText =
+      'position:fixed;right:16px;bottom:16px;background:#1f2937;color:#e5e7eb;padding:10px 14px;border-radius:10px;opacity:.97;box-shadow:0 6px 24px #0006;z-index:9999';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.background = ok ? '#064e3b' : '#7f1d1d';
+  el.style.display = 'block';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => (el.style.display = 'none'), 2200);
+}
 
 // ---- LISTE ----
 async function fetchDocs() {
@@ -78,53 +82,57 @@ async function fetchDocs() {
   if (state.cat) q.set('category', state.cat);
 
   try {
-    return await api('GET', `/api/admin/kb/list?${q.toString()}`);
+    return await kbApi('GET', `/api/admin/kb/list?${q.toString()}`);
   } catch {
-    return await api('GET', `/api/admin/kb/docs?${q.toString()}`);
+    return await kbApi('GET', `/api/admin/kb/docs?${q.toString()}`);
   }
 }
 
 function renderRows(items = []) {
   if (!elTBody) return;
 
-  elTBody.innerHTML = items.map(d => {
-    const idActive  = `kb_enabled_${d.id}`;
-    const sizeLabel = kbSizeLabel(d);
+  elTBody.innerHTML = items
+    .map((d) => {
+      const idActive = `kb_enabled_${d.id}`;
+      const sizeLabel = kbSizeLabel(d);
 
-    return `
+      return `
       <tr data-id="${d.id}">
         <td class="mono">${d.id}</td>
         <td class="title" contenteditable="true">${esc(d.title || '')}</td>
         <td class="file mono">${esc(d.filename || '')}</td>
         <td class="cat" contenteditable="true">${esc(d.category || '')}</td>
-        <td class="tags">${esc(Array.isArray(d.tags) ? d.tags.join(', ') : (d.tags || ''))}</td>
+        <td class="tags">${esc(
+          Array.isArray(d.tags) ? d.tags.join(', ') : d.tags || ''
+        )}</td>
         <td style="text-align:center;">
-          <input type="checkbox" id="${idActive}" ${d.enabled ? 'checked' : ''}>
-          <label for="${idActive}" class="sr-only" style="position:absolute;left:-9999px;">aktiv</label>
+          <input type="checkbox" id="${idActive}" ${
+        d.enabled ? 'checked' : ''
+      }>
         </td>
+        <td><input type="number" class="kbPrioInput mono" value="${
+          d.priority ?? 0
+        }" style="width:70px;"></td>
         <td>
-          <input type="number" class="kbPrioInput mono" value="${d.priority ?? 0}" style="width:70px;">
-        </td>
-        <td>
-          <button class="kbSave"   title="Speichern">💾</button>
+          <button class="kbSave" title="Speichern">💾</button>
           <button class="kbDelete" title="Löschen">🗑️</button>
         </td>
         <td class="mono size">${esc(sizeLabel)}</td>
       </tr>`;
-  }).join('');
+    })
+    .join('');
 
-  // Interaktionen je Row
-  elTBody.querySelectorAll('tr').forEach(tr => {
-    const id        = Number(tr.dataset.id);
-    const chk       = tr.querySelector('input[type="checkbox"]');
+  elTBody.querySelectorAll('tr').forEach((tr) => {
+    const id = Number(tr.dataset.id);
+    const chk = tr.querySelector('input[type="checkbox"]');
     const prioInput = tr.querySelector('.kbPrioInput');
-    const save      = tr.querySelector('.kbSave');
-    const del       = tr.querySelector('.kbDelete');
+    const save = tr.querySelector('.kbSave');
+    const del = tr.querySelector('.kbDelete');
 
     if (chk) {
       chk.addEventListener('change', async () => {
         try {
-          await api('PATCH', `/api/admin/kb/${id}`, { enabled: chk.checked });
+          await kbApi('PATCH', `/api/admin/kb/${id}`, { enabled: chk.checked });
           toast(`Doc #${id} ${chk.checked ? 'aktiviert' : 'deaktiviert'}`);
         } catch (e) {
           toast(e.message, false);
@@ -137,7 +145,7 @@ function renderRows(items = []) {
         const val = Number(prioInput.value);
         if (!Number.isFinite(val)) return;
         try {
-          await api('PATCH', `/api/admin/kb/${id}`, { priority: val });
+          await kbApi('PATCH', `/api/admin/kb/${id}`, { priority: val });
           toast(`Prio gespeichert (#${id})`);
         } catch (e) {
           toast(e.message, false);
@@ -150,11 +158,11 @@ function renderRows(items = []) {
     if (save) {
       save.addEventListener('click', async () => {
         const body = {
-          title:    tr.querySelector('.title')?.textContent.trim() || '',
-          category: tr.querySelector('.cat')?.textContent.trim()   || null
+          title: tr.querySelector('.title')?.textContent.trim() || '',
+          category: tr.querySelector('.cat')?.textContent.trim() || null,
         };
         try {
-          await api('PATCH', `/api/admin/kb/${id}`, body);
+          await kbApi('PATCH', `/api/admin/kb/${id}`, body);
           toast(`Gespeichert (#${id})`);
         } catch (e) {
           toast(e.message, false);
@@ -166,7 +174,7 @@ function renderRows(items = []) {
       del.addEventListener('click', async () => {
         if (!confirm(`Wirklich löschen (#${id})?`)) return;
         try {
-          await api('DELETE', `/api/admin/kb/${id}`);
+          await kbApi('DELETE', `/api/admin/kb/${id}`);
           toast(`Gelöscht (#${id})`);
           tr.remove();
         } catch (e) {
@@ -182,7 +190,7 @@ async function reloadList() {
     const data = await fetchDocs();
     renderRows(data.items || []);
     const t = $('#kbTotal');
-    if (t) t.textContent = data.total ?? (data.items?.length || 0);
+    if (t) t.textContent = (data.total ?? (data.items?.length || 0));
   } catch (e) {
     toast(e.message, false);
   }
@@ -191,25 +199,18 @@ async function reloadList() {
 // ---- UPLOAD ----
 async function handleUpload() {
   const files = Array.from(elFiles?.files || []);
-  if (!files.length) {
-    toast('Bitte mindestens eine Datei wählen', false);
-    return;
-  }
-
+  if (!files.length) return toast('Bitte mindestens eine Datei wählen', false);
   try {
     elBtnUpload.disabled = true;
     if (elStatus) elStatus.textContent = 'Upload läuft …';
-
     for (const f of files) {
       const fd = new FormData();
       fd.append('file', f);
       if (elTitle?.value.trim()) fd.append('title', elTitle.value.trim());
-      if (elCat?.value.trim())   fd.append('category', elCat.value.trim());
-      if (elTags?.value.trim())  fd.append('tags', elTags.value.trim());
-
-      await api('POST', '/api/admin/kb/upload', fd, true);
+      if (elCat?.value.trim()) fd.append('category', elCat.value.trim());
+      if (elTags?.value.trim()) fd.append('tags', elTags.value.trim());
+      await kbApi('POST', '/api/admin/kb/upload', fd, true);
     }
-
     toast('Upload OK');
     if (elFiles) elFiles.value = '';
     await reloadList();
@@ -227,7 +228,7 @@ async function handleReindex() {
   try {
     elReindex.disabled = true;
     if (elIndexInfo) elIndexInfo.textContent = 'Index wird neu aufgebaut …';
-    await api('POST', '/api/admin/kb/reindex');
+    await kbApi('POST', '/api/admin/kb/reindex');
     if (elIndexInfo) elIndexInfo.textContent = 'Index aktualisiert ✔';
     toast('Suchindex neu aufgebaut');
   } catch (e) {
@@ -243,19 +244,19 @@ async function handleReindex() {
 
 // ---- INIT ----
 document.addEventListener('DOMContentLoaded', async () => {
-  elTitle      = $('#kbTitle');
-  elCat        = $('#kbCategory');
-  elTags       = $('#kbTags');
-  elFiles      = $('#kbFiles');
-  elBtnUpload  = $('#kbUpload');
-  elStatus     = $('#kbStatus');
-  elSearch     = $('#kbSearch');
-  elCatFilter  = $('#kbCatFilter');
-  elSearchBtn  = $('#kbSearchBtn');
-  elReindex    = $('#kbReindex');
-  elIndexInfo  = $('#kbIndexInfo');
+  elTitle = $('#kbTitle');
+  elCat = $('#kbCategory');
+  elTags = $('#kbTags');
+  elFiles = $('#kbFiles');
+  elBtnUpload = $('#kbUpload');
+  elStatus = $('#kbStatus');
+  elSearch = $('#kbSearch');
+  elCatFilter = $('#kbCatFilter');
+  elSearchBtn = $('#kbSearchBtn');
+  elReindex = $('#kbReindex');
+  elIndexInfo = $('#kbIndexInfo');
   const kbTable = $('#kbTable');
-  elTBody      = kbTable ? kbTable.querySelector('tbody') : null;
+  elTBody = kbTable ? kbTable.querySelector('tbody') : null;
 
   elBtnUpload?.addEventListener('click', handleUpload);
   elSearch?.addEventListener('input', (e) => {
@@ -280,6 +281,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ---- kleine Hilfsklasse für Monospace ----
 (function injectMono() {
   const s = document.createElement('style');
-  s.textContent = `.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`;
+  s.textContent =
+    `.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`;
   document.head.appendChild(s);
 })();
