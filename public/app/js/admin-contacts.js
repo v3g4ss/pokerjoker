@@ -3,9 +3,18 @@
   // =========================
   // Helpers
   // =========================
-  const esc = s => (s ?? '').toString()
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+ // ---- Safe esc() ohne Neu-Deklaration ----
+if (!window.esc) {
+  window.esc = function (s) {
+    s = s ?? '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+}
 
   const fmt = iso => iso ? new Date(iso).toLocaleString() : '';
 

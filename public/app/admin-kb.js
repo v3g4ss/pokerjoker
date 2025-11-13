@@ -5,13 +5,18 @@ if (typeof window.$ === "undefined") {
   window.$ = (sel, root = document) => root.querySelector(sel);
 }
 
-// ---- Helpers ----
-window.esc = window.esc || ((s) => String(s ?? '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;'));
+// ---- Safe esc() ohne Neu-Deklaration ----
+if (!window.esc) {
+  window.esc = function (s) {
+    s = s ?? '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+}
 
 function toast(msg, ok = true) {
   console[ok ? 'log' : 'warn'](`[KB] ${msg}`);

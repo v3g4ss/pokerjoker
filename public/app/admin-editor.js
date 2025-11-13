@@ -43,8 +43,18 @@ function toast(msg) {
   console.log('[INFO]', msg);
 }
 
-const escapeHtml = s =>
-  String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+// ---- Safe esc() ohne Neu-Deklaration ----
+if (!window.esc) {
+  window.esc = function (s) {
+    s = s ?? '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+}
 
 /* ----------------------- Prompt-Einstellungen ----------------------- */
 
