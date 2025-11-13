@@ -6,10 +6,12 @@ if (typeof window.$ === "undefined") {
 }
 
 // ---- Helpers ----
-const esc = (s) => String(s ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
+window.esc = window.esc || ((s) => String(s ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;'));
 
 function toast(msg, ok = true) {
   console[ok ? 'log' : 'warn'](`[KB] ${msg}`);
