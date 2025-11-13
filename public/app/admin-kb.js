@@ -116,7 +116,7 @@
           <td class="col-prio">
             <div class="prio-wrap">
               <button class="kbPrioDec" title="Prio -1">–</button>
-              <span class="mono prio">P:${d.priority ?? 0}</span>
+              <span class="mono prio">${d.priority ?? 0}</span>
               <button class="kbPrioInc" title="Prio +1">+</button>
             </div>
           </td>
