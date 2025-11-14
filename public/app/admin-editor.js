@@ -216,7 +216,7 @@ function drawRow(item) {
       </select>
     </td>
     <td style="text-align:center;">
-      <input type="checkbox" class="mn-active" ${item.is_active ? 'checked' : ''} />
+      <input type="checkbox" class="blue-check" ${item.is_active ? 'checked' : ''}/>
     </td>
     <td><input type="number" class="mn-position" value="${item.position ?? 0}" style="width:60px;" /></td>
     <td>

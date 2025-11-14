@@ -51,9 +51,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <td style="text-align:center;">
           <input type="checkbox"
-                 id="${idActive}"
-                 name="${idActive}"
-                 ${d.enabled ? 'checked' : ''}>
+                class="blue-check"
+                id="${idActive}"
+                name="${idActive}"
+                ${d.enabled ? 'checked' : ''}>
           <label for="${idActive}" class="sr-only" style="position:absolute;left:-9999px;">aktiv</label>
         </td>
 
