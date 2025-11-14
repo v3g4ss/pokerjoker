@@ -56,6 +56,16 @@ if (!window.esc) {
   };
 }
 
+// === HTML-Escape Helper für Menü-Editor & Co. ===
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /* ----------------------- Prompt-Einstellungen ----------------------- */
 
 async function loadPromptSettings() {
@@ -134,7 +144,7 @@ async function loadPromptSettings() {
   chatModeSave?.addEventListener('click', async () => {
     const mode = Array.from(modeButtons).find(x => x.checked)?.value || 'LLM_ONLY';
     try {
-      const j = await api('/api/admin/prompt/mode', {
+      const j = await api('/api/admin/prompt-mode', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode }),
