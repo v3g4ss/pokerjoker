@@ -119,12 +119,31 @@ router.post('/kb/upload',
       });
 
       // Falls Bild: optionale Caption speichern
-      if (out?.id && out?.image && caption) {
-        await pool.query(
-          'UPDATE knowledge_docs SET image_caption=$1 WHERE id=$2',
-          [caption, out.id]
-        );
-      }
+if (out?.id && out?.image && caption) {
+  await pool.query(
+    'UPDATE knowledge_docs SET image_caption=$1 WHERE id=$2',
+    [caption, out.id]
+  );
+}
+
+    // === NEU: original_name zusätzlich speichern (für Bild-/File-Suche im Bot) ===
+    if (out?.id) {
+      await pool.query(
+        `UPDATE knowledge_docs
+          SET original_name = $1
+        WHERE id = $2`,
+        [original, out.id] // original = req.file.originalname
+      );
+    }
+
+    res.json({
+      ok: true,
+      id: out?.id,
+      chunks: out?.chunks ?? 0,
+      image: out?.image || null,
+      filename: original,
+      size
+    });
 
       res.json({
         ok: true,
