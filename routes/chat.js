@@ -168,12 +168,11 @@ async function handleChat(req, res) {
       }
     }
 
-    if (context?.length > 100) {
-        console.log('[DEBUG] Antwort basiert auf KB ✅');
-      } else {
-        console.log('[DEBUG] Antwort aus LLM ohne KB ❌');
-      }
-
+    if (usedChunks.length > 0) {
+      console.log('[DEBUG] Antwort basiert auf KB ✅');
+    } else {
+      console.log('[DEBUG] Antwort aus LLM ohne KB ❌');
+    }
 
     // ===== Fallback: reines LLM =====
     if (!answer) {
