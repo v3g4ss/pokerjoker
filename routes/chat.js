@@ -103,6 +103,13 @@ async function handleChat(req, res) {
       const hits = await searchChunks(userText, topK);
       const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE).slice(0, topK);
 
+    // === DEBUG: KB-Treffer anzeigen ===
+    console.log('[DEBUG] KB-Treffer:', strong.map(s => ({
+      score: s.score?.toFixed(3),
+      title: s.title,
+      filename: s.filename
+    })));
+
       // === NEU: Check auf Datei-Namen-Match (z. B. Profit_hands_Range.JPG) ===
       function findFileByName(input, docs) {
         const target = input.trim().toLowerCase();
@@ -160,6 +167,13 @@ async function handleChat(req, res) {
         return res.json({ ok:true, reply:'Dazu finde ich nichts in der Knowledge-Base.', sources: [], images: [] });
       }
     }
+
+    if (context?.length > 100) {
+        console.log('[DEBUG] Antwort basiert auf KB ✅');
+      } else {
+        console.log('[DEBUG] Antwort aus LLM ohne KB ❌');
+      }
+
 
     // ===== Fallback: reines LLM =====
     if (!answer) {
