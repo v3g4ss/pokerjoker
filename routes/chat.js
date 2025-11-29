@@ -103,6 +103,27 @@ async function handleChat(req, res) {
       const hits = await searchChunks(userText, topK);
       const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE).slice(0, topK);
 
+      // === NEU: Check auf Datei-Namen-Match (z. B. Profit_hands_Range.JPG) ===
+      function findFileByName(input, docs) {
+        const target = input.trim().toLowerCase();
+        return docs.find(doc =>
+          doc.original_name?.toLowerCase() === target ||
+          doc.filename?.toLowerCase() === target ||
+          doc.title?.toLowerCase() === target
+        );
+      }
+
+      // Falls User explizit nach einer Datei fragt (einzelner Begriff)
+      const words = userText.split(/\s+/);
+      const possibleFilename = words.find(w => /\.(jpg|jpeg|png|json|txt)$/i.test(w));
+      if (possibleFilename) {
+        const fileDoc = findFileByName(possibleFilename, strong);
+        if (fileDoc?.image_url) {
+          imageUrls = [fileDoc.image_url];
+          answer = `✅ Ich habe die Datei **${fileDoc.original_name || fileDoc.filename}** gefunden.\n\n![](${fileDoc.image_url})`;
+        }
+      }
+
       if (strong.length) {
         // Quellen inkl. Bild-URL/Dateiname aufbewahren
         usedChunks = strong.map(({ id, source, title, image_url, filename, category }) => ({
