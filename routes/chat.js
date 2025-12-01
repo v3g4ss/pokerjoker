@@ -86,7 +86,7 @@ async function handleChat(req, res) {
       });
     }
 
-    // ===== Bot-Config =====
+    // ===== Bot-Config laden =====
     const cfg   = await getBotConfig(uid);
     const mode  = (cfg?.kb_mode || 'KB_PREFERRED').toUpperCase();
     const sys   = cfg?.system_prompt || 'Du bist Poker Joker. Antworte knapp.';
@@ -96,69 +96,57 @@ async function handleChat(req, res) {
     let usedChunks = [];
     let answer     = '';
     let usedTokens = 0;
-    let imageUrls  = [];   // ⬅️ hier sammeln wir KB-Bilder
+    let imageUrls  = [];
 
-    // ===== KB-Retrieval =====
+    // ===== Knowledge-Retrieval =====
     if (mode !== 'LLM_ONLY') {
       const hits = await searchChunks(userText, topK);
       const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE).slice(0, topK);
 
-    // === DEBUG: KB-Treffer anzeigen ===
-    console.log('[DEBUG] KB-Treffer:', strong.map(s => ({
-      score: s.score?.toFixed(3),
-      title: s.title,
-      filename: s.filename
-    })));
+      // === DEBUG KB-Treffer
+      console.log('[DEBUG] KB-Treffer:', strong.map(s => ({
+        score: s.score?.toFixed(3),
+        title: s.title,
+        filename: s.filename
+      })));
 
-      // === NEU: Check auf Datei-Namen-Match (z. B. Profit_hands_Range.JPG) ===
-      function findFileByName(input, docs) {
-        const target = input.trim().toLowerCase();
-        return docs.find(doc =>
-          doc.original_name?.toLowerCase() === target ||
-          doc.filename?.toLowerCase() === target ||
-          doc.title?.toLowerCase() === target
-        );
-      }
-
-      // Falls User explizit nach einer Datei fragt (einzelner Begriff)
-      const words = userText.split(/\s+/);
-      const possibleFilename = words.find(w => /\.(jpg|jpeg|png|json|txt)$/i.test(w));
+      // === Datei-Name explizit erwähnt?
+      const possibleFilename = userText.split(/\s+/).find(w => /\.(jpg|jpeg|png|json|txt)$/i.test(w));
       if (possibleFilename) {
-        const fileDoc = findFileByName(possibleFilename, strong);
+        const fileDoc = strong.find(doc =>
+          doc.original_name?.toLowerCase() === possibleFilename.toLowerCase() ||
+          doc.filename?.toLowerCase() === possibleFilename.toLowerCase() ||
+          doc.title?.toLowerCase() === possibleFilename.toLowerCase()
+        );
         if (fileDoc?.image_url) {
           imageUrls = [fileDoc.image_url];
           answer = `✅ Ich habe die Datei **${fileDoc.original_name || fileDoc.filename}** gefunden.\n\n![](${fileDoc.image_url})`;
         }
       }
 
-      if (strong.length) {
-        // Quellen inkl. Bild-URL/Dateiname aufbewahren
+      // === Wenn noch kein Antwort-Text erstellt wurde → normalen Prompt generieren
+      if (!answer && strong.length) {
         usedChunks = strong.map(({ id, source, title, image_url, filename, category }) => ({
           id, source, title, image_url, filename, category
         }));
 
-        // Alle Bild-URLs einsammeln (falls vorhanden)
+        // max. 3 Bilder aus KB extrahieren
         imageUrls = strong
           .map(h => h.image_url)
-          .filter(u => typeof u === 'string' && u.startsWith('/')) // nur lokale, von /public served
-          .slice(0, 3); // höchstens 3 Bilder mitliefern
+          .filter(u => typeof u === 'string' && u.startsWith('/'))
+          .slice(0, 3);
 
-        // Kontexttext aufbauen
-        let context = strong
-          .map(h => h.text)
-          .filter(Boolean)
-          .join('\n---\n');
-
+        // Kontexttext generieren
+        let context = strong.map(h => h.text).filter(Boolean).join('\n---\n');
         if (context.length > 2000) context = context.slice(0, 2000);
 
         const out = await llmAnswer({ userText, context, systemPrompt: sys, model: mdl, temperature: temp });
         answer     = out.text;
         usedTokens = out.usedTokens;
 
-        // Wenn Bilder gefunden wurden, im Text erwähnen (Markdown) – Frontend kann zusätzlich images[] nutzen
+        // Bilder im Text erwähnen
         if (imageUrls.length) {
           const first = imageUrls[0];
-          // sanfter Zusatz statt Textflut
           answer += `\n\n**Grafik:** ![](${first})`;
         }
       }
@@ -168,34 +156,29 @@ async function handleChat(req, res) {
       }
     }
 
-    if (usedChunks.length > 0) {
-      console.log('[DEBUG] Antwort basiert auf KB ✅');
-    } else {
-      console.log('[DEBUG] Antwort aus LLM ohne KB ❌');
-    }
+    console.log(`[DEBUG] Antwort basiert auf ${usedChunks.length ? 'KB ✅' : 'LLM ❌'}`);
 
-    // ===== Fallback: reines LLM =====
+    // ===== Fallback nur LLM =====
     if (!answer) {
       const out = await llmAnswer({ userText, context: null, systemPrompt: sys, model: mdl, temperature: temp });
       answer     = out.text;
       usedTokens = out.usedTokens;
     }
 
-    // ===== Token-Verbrauch (deine Logik) =====
-    const words = answer?.trim().split(/\s+/).length || 1;
-    const punctCount = (answer?.match(/[.!?,;:]/g) || []).length;
-    const punctRate = Number(cfg?.punct_rate ?? process.env.PUNCT_RATE ?? 1);
-    const maxUsed   = Number(cfg?.max_usedtokens_per_msg ?? process.env.MAX_USEDTOKENS_PER_MSG ?? 300);
-
-    const baseCost = words + punctCount; // Wörter + Satzzeichen
-    let toCharge = Math.min(Math.ceil(baseCost * punctRate), maxUsed);
+    // ===== Token-Verbrauch berechnen =====
+    const wordCount   = answer?.trim().split(/\s+/).length || 1;
+    const punctCount  = (answer?.match(/[.!?,;:]/g) || []).length;
+    const punctRate   = Number(cfg?.punct_rate ?? process.env.PUNCT_RATE ?? 1);
+    const maxUsed     = Number(cfg?.max_usedtokens_per_msg ?? process.env.MAX_USEDTOKENS_PER_MSG ?? 300);
+    const baseCost    = wordCount + punctCount;
+    const toCharge    = Math.min(Math.ceil(baseCost * punctRate), maxUsed);
 
     console.log('[DEBUG] Tokenverbrauch (pro Wort):', {
-      uid, words, punctCount, punctRate, baseCost, toCharge
+      uid, words: wordCount, punctCount, punctRate, baseCost, toCharge
     });
 
     try {
-      await tokenDb.consumeTokens(uid, toCharge, `chat usage=${words} words + ${punctCount} punct ×${punctRate}`);
+      await tokenDb.consumeTokens(uid, toCharge, `chat usage=${wordCount} words + ${punctCount} punct ×${punctRate}`);
     } catch (e) {
       console.error('❌ Token-Abbuchung fehlgeschlagen:', e.message);
       return res.status(402).json({ reply: '❌ Token-Abbuchung gescheitert 😵 Buy-in nötig!' });
@@ -204,7 +187,7 @@ async function handleChat(req, res) {
     const after  = await tokenDb.getTokens(uid);
     const newBal = after?.balance ?? (balanceNow - toCharge);
 
-    // ===== Quellen-Liste (Duplikate raus) =====
+    // ===== Quellen (Sources) extrahieren
     const seen = new Set();
     const sources = (usedChunks || [])
       .map(s => s && (s.title || s.source || s.filename) ? {
@@ -226,16 +209,17 @@ async function handleChat(req, res) {
       console.error('Fehler beim Speichern der Chat-History:', e.message);
     }
 
-    // ===== Antwort =====
+    // ===== Antwort senden =====
     return res.json({
       ok: true,
       reply: answer,
       balance: newBal,
       purchased,
-      sources,          // inkl. image_url falls vorhanden
-      images: imageUrls, // <— Frontend kann direkt anzeigen (max. 3)
+      sources,
+      images: imageUrls,
       meta: { usedTokens, punctCount, punctRate, charged: toCharge }
     });
+
   } catch (err) {
     console.error('CHAT ERROR:', err);
     return res.status(500).json({ ok:false, reply:'Interner Fehler. Versuch’s gleich nochmal.' });

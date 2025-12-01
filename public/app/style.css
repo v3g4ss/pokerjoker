@@ -581,3 +581,9 @@ div[style*="userSearch"] {
   color: #999;
   text-decoration: line-through;
 }
+
+.chat-image {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 8px 0;
+}

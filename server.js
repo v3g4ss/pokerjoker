@@ -85,6 +85,8 @@ app.use('/api/admin', adminKbRoutes);
 app.use('/api/admin', adminMessagesRoutes);
 app.use('/api/admin', adminMenuRoutes);
 app.use('/api/admin/payconfig', adminPayConfig);
+app.use('/api/admin/upload-img', require('./routes/admin-upload-img'));
+
 
 // --- User APIs ---
 const chatRoutes = require('./routes/chat');

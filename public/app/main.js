@@ -174,6 +174,15 @@ function appendMessage(sender, text, save = true) {
   chatBox.appendChild(msg);  
 }
 
+// === NEU: Bilder inline einfügen, wenn eine Bildnachricht erkannt wird ===
+function renderImageMessage(url) {
+  if (!chatBox || !url) return;
+  const msg = document.createElement('div');
+  msg.classList.add('message', 'bot');
+  msg.innerHTML = `<strong>🤖 Poker Joker (Bild):</strong><br><img src="${url}" alt="Bild" style="max-width:100%;border-radius:10px;margin-top:5px;">`;
+  chatBox.appendChild(msg);
+}
+
 // === Tipp-Erkennung / Hotkey-GUARD (robust) ===
 const isTypingTarget = (el) => {
   if (!el) return false;
@@ -537,6 +546,14 @@ input.value = ''; // ✅ Eingabefeld nach Senden leeren
     // === Antwort des Bots auslesen ===
     const data = await res.json().catch(() => ({}));
     const reply = data.reply?.trim() || '…';
+
+    // Wenn Bild-Link erkannt → Bild rendern, sonst Text
+    if (reply.startsWith('img:')) {
+      const imgUrl = reply.replace(/^img:\s*/, '');
+      renderImageMessage(imgUrl);
+    } else {
+      appendMessage('bot', reply);
+    }
 
     // === Nur einmal anzeigen (nicht nochmal speichern) ===
     appendMessage('bot', reply);

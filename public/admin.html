@@ -505,6 +505,38 @@ input[type=checkbox].blue-check:checked::after {
     </table>
   </section>
 
+    <!-- 🖼️ Grafik-Upload für Knowledge Base -->
+<div class="card" id="kbImageUploadCard">
+  <h3>📷 Bild zur Knowledge Base hochladen</h3>
+  <form id="imgUploadForm" enctype="multipart/form-data">
+    <input type="file" name="image" accept=".png,.jpg,.jpeg" required><br>
+    <input type="text" name="title" placeholder="Titel eingeben" required><br>
+    <input type="text" name="description" placeholder="Kurzbeschreibung eingeben" required><br>
+    <button type="submit">Bild hochladen</button>
+  </form>
+</div>
+
+<script>
+  document.getElementById('imgUploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+
+    const res = await fetch('/api/admin/upload-img', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      alert('✅ Bild erfolgreich hochgeladen!');
+      form.reset();
+    } else {
+      alert('❌ Fehler beim Upload!');
+    }
+  });
+</script>
+
   <!-- Untermenüs -->
   <section class="card span-2" id="submenuCard">
     <h2>Untermenüs verwalten</h2>
