@@ -8,10 +8,10 @@ const router = express.Router();
 const upload = multer({ dest: 'uploads_tmp/' });
 
 router.post('/', upload.single('image'), async (req, res) => {
-  const { title, description } = req.body;
+  const { title, description, category } = req.body;
   const file = req.file;
 
-  if (!file || !title || !description) {
+  if (!file || !title || !description || !category) {
     return res.status(400).json({ error: 'Fehlende Daten' });
   }
 
@@ -34,11 +34,25 @@ router.post('/', upload.single('image'), async (req, res) => {
     // === Beschreibungstext generieren ===
     const syntheticText = `Bild: ${title}\nBeschreibung: ${description}\nDateiname: ${filename}`;
 
-    // === In Knowledge Base speichern ===
+    // === Metadaten extrahieren ===
+    const mimeType = file.mimetype;
+    const fileSize = file.size;
+    const tokenCount = Math.ceil(syntheticText.length / 4); // einfache Schätzung
+
+    // === In knowledge_docs speichern ===
+    const docRes = await pool.query(`
+      INSERT INTO knowledge_docs (title, filename, mime, size_bytes, category)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id
+    `, [title, filename, mimeType, fileSize, category]);
+
+    const docId = docRes.rows[0].id;
+
+    // === In knowledge_chunks eintragen ===
     await pool.query(`
-      INSERT INTO kb_chunks (title, content, filename, type)
-      VALUES ($1, $2, $3, 'image')
-    `, [title, syntheticText, filename]);
+      INSERT INTO knowledge_chunks (doc_id, ord, text, token_count)
+      VALUES ($1, 0, $2, $3)
+    `, [docId, syntheticText, tokenCount]);
 
     return res.json({ success: true, filename });
   } catch (err) {
