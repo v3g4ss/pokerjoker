@@ -7,10 +7,11 @@ const useSSL  = !isLocal && (process.env.PGSSL === 'true' || process.env.NODE_EN
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: useSSL ? { rejectUnauthorized: false } : false, // <— entscheidend
-  max: 25,                       // Erhöht von 10 → 25 für mehr parallele Requests
+  ssl: useSSL ? { rejectUnauthorized: false } : false,
+  max: 25,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
 
-module.exports = { pool };
+// WICHTIG: DIREKT exportieren – KEIN Objekt drum herum
+module.exports = pool;
