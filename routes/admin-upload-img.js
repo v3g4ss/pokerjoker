@@ -1,4 +1,3 @@
-// routes/admin-upload-img.js
 const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
@@ -6,7 +5,6 @@ const path = require('path');
 const pool = require('../db');
 
 const router = express.Router();
-
 const upload = multer({ dest: 'uploads_tmp/' });
 
 router.post('/', upload.single('image'), async (req, res) => {
@@ -17,27 +15,35 @@ router.post('/', upload.single('image'), async (req, res) => {
     return res.status(400).json({ error: 'Fehlende Daten' });
   }
 
-  const ext = path.extname(file.originalname);
-  const filename = `${Date.now()}_${file.originalname}`;
-  const targetPath = path.join('public/kb_imgs', filename);
-
   try {
-    // Bild verschieben
+    // === Zielordner sicherstellen ===
+    const targetDir = path.join(__dirname, '..', 'public', 'kb_imgs');
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    // === Dateiname bereinigen ===
+    const ext = path.extname(file.originalname) || '.jpg';
+    const base = path.basename(file.originalname, ext).replace(/[^a-z0-9_\-äöüÄÖÜß]/gi, '_');
+    const filename = `${Date.now()}_${base}${ext}`;
+    const targetPath = path.join(targetDir, filename);
+
+    // === Bild verschieben ===
     fs.renameSync(file.path, targetPath);
 
-    // Beschreibung als .txt simulieren
+    // === Beschreibungstext generieren ===
     const syntheticText = `Bild: ${title}\nBeschreibung: ${description}\nDateiname: ${filename}`;
-    
-    // Optional: in KB speichern
+
+    // === In Knowledge Base speichern ===
     await pool.query(`
       INSERT INTO kb_chunks (title, content, filename, type)
       VALUES ($1, $2, $3, 'image')
     `, [title, syntheticText, filename]);
 
-    res.json({ success: true, filename });
+    return res.json({ success: true, filename });
   } catch (err) {
     console.error('[UPLOAD-IMG]', err);
-    res.status(500).json({ error: 'Fehler beim Upload' });
+    return res.status(500).json({ error: 'Fehler beim Upload' });
   }
 });
 
