@@ -14,4 +14,5 @@ const pool = new Pool({
 });
 
 // WICHTIG: DIREKT exportieren – KEIN Objekt drum herum
-module.exports = pool;
+module.exports = { pool };
+
