@@ -547,16 +547,13 @@ input.value = ''; // ✅ Eingabefeld nach Senden leeren
     const data = await res.json().catch(() => ({}));
     const reply = data.reply?.trim() || '…';
 
-    // Wenn Bild-Link erkannt → Bild rendern, sonst Text
-    if (reply.startsWith('img:')) {
-      const imgUrl = reply.replace(/^img:\s*/, '');
-      renderImageMessage(imgUrl);
-    } else {
-      appendMessage('bot', reply);
-    }
-
-    // === Nur einmal anzeigen (nicht nochmal speichern) ===
+    // === Antwort anzeigen ===
     appendMessage('bot', reply);
+
+    // === Bilder anzeigen ===
+    if (data.images && Array.isArray(data.images)) {
+      data.images.forEach(url => renderImageMessage(url));
+    }
 
     // Tokens aktualisieren
     try {

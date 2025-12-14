@@ -120,7 +120,7 @@ async function handleChat(req, res) {
         );
         if (fileDoc?.image_url) {
           imageUrls = [fileDoc.image_url];
-          answer = `img:${fileDoc.image_url}`;
+          answer = `Ich habe das Bild "${fileDoc.original_name || fileDoc.filename}" gefunden.`;
         }
       }
 
@@ -146,8 +146,7 @@ async function handleChat(req, res) {
 
         // Bilder im Text erwähnen
         if (imageUrls.length) {
-          const first = imageUrls[0];
-          answer += `\n\nimg:${first}`;
+          answer += `\n\nIch habe relevante Bilder gefunden.`;
         }
       }
 
