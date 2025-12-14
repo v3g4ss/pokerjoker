@@ -1,26 +1,21 @@
-// utils/knowledge.js
 const crypto = require('crypto');
 const { pool } = require('../db');
-const fs   = require('fs');
+const fs = require('fs');
 const path = require('path');
 
-// optionale Parser „best effort“
 const { JSDOM } = (() => { try { return require('jsdom'); } catch { return {}; } })();
 let pdfParse = null, mammoth = null, xlsx = null;
 try { pdfParse = require('pdf-parse'); } catch {}
-try { mammoth  = require('mammoth'); } catch {}
-try { xlsx     = require('xlsx'); } catch {}
+try { mammoth = require('mammoth'); } catch {}
+try { xlsx = require('xlsx'); } catch {}
 
-// ~100k Tokens grob (4 chars/Tkn)
 const MAX_TEXT_CHARS = 400_000;
 
-// ===== Helpers =====
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const ext = (name = '') => (name.split('.').pop() || '').toLowerCase();
 const looksSecret = (s) => /(api[_-]?key|bearer|sk-|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.)/i.test(s);
 const approxTokens = (s = '') => Math.ceil(s.length / 4);
 
-// Sichere Variante: immer Fortschritt, auch bei sehr kurzen Texten
 function chunkify(text, size = 3500, overlap = 600) {
   if (!text) return [];
   const len = text.length;
@@ -40,28 +35,21 @@ function chunkify(text, size = 3500, overlap = 600) {
   return out;
 }
 
-// ===== Extractors =====
-// Wichtig: KEIN blindes buffer.toString() bei Binärformaten!
 async function extractText(buffer, filename, mime = '') {
   const e = ext(filename);
 
-  // reine Textformate
   if (e === 'jsonl') {
     const raw = buffer.toString('utf8');
     return raw.split(/\r?\n/).filter(Boolean).join('\n');
   }
-  if (e === 'csv' || e === 'md' || e === 'txt' || e === 'yaml' || e === 'yml') {
+  if (['csv', 'md', 'txt', 'yaml', 'yml'].includes(e)) {
     return buffer.toString('utf8');
   }
-
-  // HTML (nur, wenn jsdom da ist)
   if (e === 'html' && JSDOM) {
     const raw = buffer.toString('utf8');
     const dom = new JSDOM(raw);
     return dom.window.document.body.textContent || raw;
   }
-
-  // Binärformate – Parser direkt auf Buffer
   if (e === 'pdf' && pdfParse) {
     const { text } = await pdfParse(buffer);
     return text || '';
@@ -75,22 +63,18 @@ async function extractText(buffer, filename, mime = '') {
     return wb.SheetNames.map(n => xlsx.utils.sheet_to_csv(wb.Sheets[n])).join('\n');
   }
 
-  // Fallback
   return buffer.toString('utf8');
 }
 
-// ===== Ingestion =====
 async function ingestOne({ buffer, filename, mime, category, tags, title }) {
   const hash = sha(buffer);
   const e = ext(filename || '');
   const isImage = ['png', 'jpg', 'jpeg'].includes(e);
   const normTags = (Array.isArray(tags) && tags.length) ? tags : null;
 
-  // === Dedupe für ALLE Typen (auch Bilder) ===
   const dupe = await pool.query('SELECT id FROM knowledge_docs WHERE hash=$1', [hash]);
   if (dupe.rows[0]) return { id: dupe.rows[0].id, skipped: true };
 
-  // === Bild: nur Datei speichern + Metadaten in DB, KEIN Binary/Text in DB ===
   if (isImage || (mime && mime.startsWith('image/'))) {
     const imgName = `${Date.now()}-${String(filename).replace(/\s+/g, '_')}`;
     const relPath = `/uploads/knowledge/${imgName}`;
@@ -113,13 +97,12 @@ async function ingestOne({ buffer, filename, mime, category, tags, title }) {
       normTags,
       hash,
       relPath,
-      filename  // original_name
+      filename
     ]);
 
     return { id: rows[0].id, image: relPath };
   }
 
-  // === Text-/Dok-Formate wie gehabt ===
   let content = await extractText(buffer, filename, mime) || '';
   if (content.length > MAX_TEXT_CHARS) content = content.slice(0, MAX_TEXT_CHARS);
 
@@ -162,20 +145,17 @@ async function ingestOne({ buffer, filename, mime, category, tags, title }) {
   return { id: doc_id, chunks: chunks.length };
 }
 
-// ===== Search (FTS) =====
 async function searchChunks(q, categories = [], topK = 5) {
   const orig = String(q || '');
-    // NEU: Query aufräumen (Satzzeichen raus, kurze Wörter entfernen)
-  const cleaned =
-    orig
-      .normalize('NFKD')
-      .replace(/[^\p{L}\p{N}\s-]/gu, ' ')   // nur Buchstaben/Zahlen/Leer/Hyphen
-      .split(/\s+/)
-      .filter(w => w.length >= 3)          // "wie", "der", "in" fliegen raus
-      .join(' ')
-      .trim();
+  const cleaned = orig
+    .normalize('NFKD')
+    .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 3)
+    .join(' ')
+    .trim();
 
-  const term = cleaned || orig;            // falls alles rausfliegt, nimm Original
+  const term = cleaned || orig;
 
   const params = [term];
   let where = `kc.tsv @@ websearch_to_tsquery('simple', $1) AND kd.enabled = TRUE`;
@@ -213,51 +193,46 @@ async function searchChunks(q, categories = [], topK = 5) {
 
   let out = diversify(rows);
 
-     // --- Fallback, falls FTS nichts findet ---
- if (out.length === 0) {
-   // Query in Tokens zerlegen; Bindestriche/Spaces angleichen
-   const tokens = (cleaned || orig)
-     .replace(/[-\s]+/g, ' ')          // buy-in -> buy in
-     .split(/\s+/)
-     .filter(w => w.length >= 3);      // Kurz-Wörter raus
+  if (out.length === 0) {
+    const tokens = (cleaned || orig)
+      .replace(/[-\s]+/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 3);
+    const toks = tokens.length ? tokens : [cleaned || orig];
 
-   const toks = tokens.length ? tokens : [ (cleaned || orig) ];
+    const clauses = [];
+    const params2 = [];
+    let p = 1;
 
-   // für jedes Token: (text ILIKE $n OR title ILIKE $n OR filename ILIKE $n OR tags ILIKE $n)
-   const clauses = [];
-   const params2 = [];
-   let p = 1;
-
-   for (const t of toks) {
-     const needle = `%${t}%`;
-     clauses.push(`(
+    for (const t of toks) {
+      const needle = `%${t}%`;
+      clauses.push(`(
         kc.text ILIKE $${p} OR
         kd.title ILIKE $${p+1} OR
         kd.filename ILIKE $${p+2} OR
         COALESCE(array_to_string(kd.tags, ','), '') ILIKE $${p+3}
-     )`);
-     params2.push(needle, needle, needle, needle);
-     p += 4;
-   }
+      )`);
+      params2.push(needle, needle, needle, needle);
+      p += 4;
+    }
 
-const sql2 = `
-  SELECT kc.id, kc.doc_id, kc.ord, kc.text,
-         kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name,
-         kd.filename as source
-  FROM knowledge_chunks kc
-  JOIN knowledge_docs  kd ON kd.id = kc.doc_id
-  WHERE kd.enabled = TRUE
-    ${clauses.length ? ' AND (' + clauses.join(' OR ') + ')' : ''}
-  ORDER BY kd.priority DESC, kc.id DESC
-  LIMIT $${p};
-`;
-params2.push(topK);
+    const sql2 = `
+      SELECT kc.id, kc.doc_id, kc.ord, kc.text,
+             kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name,
+             kd.filename as source
+      FROM knowledge_chunks kc
+      JOIN knowledge_docs  kd ON kd.id = kc.doc_id
+      WHERE kd.enabled = TRUE
+        ${clauses.length ? ' AND (' + clauses.join(' OR ') + ')' : ''}
+      ORDER BY kd.priority DESC, kc.id DESC
+      LIMIT $${p};
+    `;
+    params2.push(topK);
+    const { rows: rows2 } = await pool.query(sql2, params2);
+    out = diversify(rows2);
+  }
 
-const { rows: rows2 } = await pool.query(sql2, params2);
-out = diversify(rows2);
- }
-
-  // === NEU: Suche auch nach Bildern (die keine Chunks haben) ===
+  // === Bilder durchsuchen ===
   const imageParams = [];
   let imageWhere = 'kd.enabled = TRUE AND kd.image_url IS NOT NULL';
   if (categories.length) {
@@ -265,43 +240,41 @@ out = diversify(rows2);
     imageParams.push(categories);
   }
 
-  // Suche nach Bildern basierend auf title, filename, original_name, tags, category
-const imageClauses = [];
-const imageParams2 = [];
-let ip = 1;
+  const toks = [term];
+  const imageClauses = [];
+  const imageParams2 = [];
+  let ip = 1;
 
-const toks = [term]; // <--- FIX: 'toks' definieren!
+  for (const t of toks) {
+    const needle = `%${t}%`;
+    imageClauses.push(`(
+      kd.title ILIKE $${ip} OR
+      kd.filename ILIKE $${ip+1} OR
+      COALESCE(kd.original_name, '') ILIKE $${ip+2} OR
+      COALESCE(array_to_string(kd.tags, ','), '') ILIKE $${ip+3} OR
+      COALESCE(kd.category, '') ILIKE $${ip+4}
+    )`);
+    imageParams2.push(needle, needle, needle, needle, needle);
+    ip += 5;
+  }
 
-for (const t of toks) {
-  const needle = `%${t}%`;
-  imageClauses.push(`(
-    kd.title ILIKE $${ip} OR
-    kd.filename ILIKE $${ip+1} OR
-    COALESCE(kd.original_name, '') ILIKE $${ip+2} OR
-    COALESCE(array_to_string(kd.tags, ','), '') ILIKE $${ip+3} OR
-    COALESCE(kd.category, '') ILIKE $${ip+4}
-  )`);
-  imageParams2.push(needle, needle, needle, needle, needle);
-  ip += 5;
+  const imageSql = `
+    SELECT kd.id as doc_id, NULL as id, NULL as ord, NULL as text,
+           kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name,
+           kd.filename as source
+    FROM knowledge_docs kd
+    WHERE ${imageWhere}
+      ${imageClauses.length ? ' AND (' + imageClauses.join(' OR ') + ')' : ''}
+    ORDER BY kd.priority DESC, kd.id DESC
+    LIMIT $${ip};
+  `;
+  imageParams2.push(topK);
+
+  const { rows: imageRows } = await pool.query(imageSql, imageParams2);
+  const combined = [...out, ...imageRows];
+  const finalOut = diversify(combined);
+
+  return finalOut.slice(0, topK);
 }
 
-const imageSql = `
-  SELECT kd.id as doc_id, NULL as id, NULL as ord, NULL as text,
-         kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name,
-         kd.filename as source
-  FROM knowledge_docs kd
-  WHERE ${imageWhere}
-    ${imageClauses.length ? ' AND (' + imageClauses.join(' OR ') + ')' : ''}
-  ORDER BY kd.priority DESC, kd.id DESC
-  LIMIT $${ip};
-`;
-imageParams2.push(topK);
-
-const { rows: imageRows } = await pool.query(imageSql, imageParams2);
-
-// Kombiniere Text- und Bild-Ergebnisse, diversifiziere
-const combined = [...out, ...imageRows];
-const finalOut = diversify(combined);
-
-return finalOut.slice(0, topK);
-
+module.exports = { ingestOne, searchChunks };
