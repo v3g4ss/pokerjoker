@@ -119,7 +119,7 @@ async function handleChat(req, res) {
           doc.title?.toLowerCase() === possibleFilename.toLowerCase()
         );
         if (fileDoc?.image_url) {
-          imageUrls = [`/api/admin/kb/img/${fileDoc.doc_id}`];
+          imageUrls = [`/api/admin/kb/img/${fileDoc.id}`];
           answer = `Ich habe das Bild "${fileDoc.original_name || fileDoc.filename}" gefunden.`;
         }
       }

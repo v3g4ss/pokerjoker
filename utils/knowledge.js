@@ -259,7 +259,7 @@ async function searchChunks(q, categories = [], topK = 5) {
   }
 
   const imageSql = `
-    SELECT kd.id as doc_id, NULL as id, NULL as ord, NULL as text,
+    SELECT kd.id as id, NULL as ord, NULL as text,
            kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name,
            kd.filename as source
     FROM knowledge_docs kd
