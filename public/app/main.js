@@ -174,13 +174,13 @@ function appendMessage(sender, text, save = true) {
   chatBox.appendChild(msg);  
 }
 
-// === NEU: Bilder inline einfügen, wenn eine Bildnachricht erkannt wird ===
-function renderImageMessage(url) {
-  if (!chatBox || !url) return;
-  const msg = document.createElement('div');
-  msg.classList.add('message', 'bot');
-  msg.innerHTML = `<strong>🤖 Poker Joker (Bild):</strong><br><img src="${url}" alt="Bild" style="max-width:100%;border-radius:10px;margin-top:5px;cursor:pointer;" onclick="showImageModal('${url}')">`;
-  chatBox.appendChild(msg);
+function renderImageMessage(imageUrl) {
+  const fullUrl = `/api/admin/kb/img/${encodeURIComponent(imageUrl)}`;
+  const img = document.createElement('img');
+  img.src = fullUrl;
+  img.alt = 'Bild';
+  img.classList.add('chat-image');
+  appendMessage('bot', img.outerHTML);
 }
 
 // === Bild-Modal ===

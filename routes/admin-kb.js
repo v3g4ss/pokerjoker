@@ -55,32 +55,36 @@ async function getDocImageMeta(id) {
 //  - kein requireAuth/Admin: soll im Live-Bot/Frontend eingebettet werden können
 //  - liefert 404, wenn Doc nicht existiert, nicht enabled oder kein image_url
 // ===================================================================================
-router.get('/kb/img/:id', async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!id) return res.status(400).send('Bad Request');
+router.get('/kb/img/:value', async (req, res) => {
+  const value = req.params.value;
+
+  let doc;
+  if (/^\d+$/.test(value)) {
+    // → ist ID
+    doc = await getDocImageMeta(parseInt(value, 10));
+  } else {
+    // → ist ein Dateiname
+    const q = await pool.query(
+      'SELECT * FROM knowledge_docs WHERE image_url = $1 AND enabled = true',
+      ['uploads/knowledge/' + value]
+    );
+    doc = q.rows[0];
+  }
+
+  if (!doc || !doc.image_url) return res.status(404).send('Not found');
+
+  const rel = normalizeRel(doc.image_url);
+  const abs = path.join(__dirname, '..', 'public', rel);
 
   try {
-    const meta = await getDocImageMeta(id);
-    if (!meta || !meta.enabled || !meta.image_url) {
-      return res.status(404).send('Not found');
-    }
-
-    const rel = normalizeRel(meta.image_url); // 'uploads/knowledge/...'
-    const abs = path.join(__dirname, '..', 'public', rel);
-
-    // Existenz prüfen (saubereres 404)
-    try {
-      await fsp.access(abs);
-    } catch {
-      return res.status(404).send('Not found');
-    }
-
-    return res.sendFile(abs);
-  } catch (e) {
-    console.error('[KB img] error:', e);
-    return res.status(500).send('Server error');
+    await fsp.access(abs);
+  } catch {
+    return res.status(404).send('Not found');
   }
+
+  return res.sendFile(abs);
 });
+
 
 // ===================================================================================
 // POST /api/admin/kb/upload   (multipart/form-data; field "file")
@@ -144,6 +148,15 @@ if (out?.id && out?.image && caption) {
       filename: original,
       size
     });
+
+      res.json({
+        ok: true,
+        id: out?.id,
+        chunks: out?.chunks ?? 0,
+        image: out?.image || null,
+        filename: original,
+        size
+      });
     } catch (err) {
       rmSafe(tmpPath);
       console.error('[KB upload] error:', err);
