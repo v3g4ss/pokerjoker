@@ -12,7 +12,7 @@ router.post('/', upload.single('image'), async (req, res) => {
   const { title, description, category } = req.body;
   const file = req.file;
 
-  if (!file || !title || !description || !category) {
+  if (!file || !title || !description) {
     return res.status(400).json({ error: 'Fehlende Daten' });
   }
 
@@ -41,11 +41,13 @@ router.post('/', upload.single('image'), async (req, res) => {
     const tokenCount = Math.ceil(syntheticText.length / 4); // einfache Schätzung
 
     // === In knowledge_docs speichern ===
+    const originalName = file.originalname || '';
+
     const docRes = await pool.query(`
-      INSERT INTO knowledge_docs (title, filename, mime, size_bytes, category)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO knowledge_docs (title, filename, mime, size_bytes, category, original_name)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
-    `, [title, filename, mimeType, fileSize, category]);
+    `, [title, filename, mimeType, fileSize, category || 'Bilder', originalName]);
 
     const docId = docRes.rows[0].id;
 
