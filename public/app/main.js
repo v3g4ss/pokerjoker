@@ -179,8 +179,27 @@ function renderImageMessage(url) {
   if (!chatBox || !url) return;
   const msg = document.createElement('div');
   msg.classList.add('message', 'bot');
-  msg.innerHTML = `<strong>🤖 Poker Joker (Bild):</strong><br><img src="${url}" alt="Bild" style="max-width:100%;border-radius:10px;margin-top:5px;">`;
+  msg.innerHTML = `<strong>🤖 Poker Joker (Bild):</strong><br><img src="${url}" alt="Bild" style="max-width:100%;border-radius:10px;margin-top:5px;cursor:pointer;" onclick="showImageModal('${url}')">`;
   chatBox.appendChild(msg);
+}
+
+// === Bild-Modal ===
+function showImageModal(url) {
+  // Entferne altes Modal
+  const oldModal = document.getElementById('imageModal');
+  if (oldModal) oldModal.remove();
+
+  // Erstelle neues Modal
+  const modal = document.createElement('div');
+  modal.id = 'imageModal';
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center;
+    z-index: 10000; cursor: pointer;
+  `;
+  modal.innerHTML = `<img src="${url}" style="max-width: 90%; max-height: 90%; border-radius: 10px;">`;
+  modal.onclick = () => modal.remove();
+  document.body.appendChild(modal);
 }
 
 // === Tipp-Erkennung / Hotkey-GUARD (robust) ===
