@@ -101,8 +101,8 @@ async function ingestOne({ buffer, filename, mime, category, tags, title }) {
 
     const { rows } = await pool.query(`
       INSERT INTO knowledge_docs
-        (title, filename, mime, size_bytes, category, tags, hash, image_url, created_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+        (title, filename, mime, size_bytes, category, tags, hash, image_url, original_name, created_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
       RETURNING id
     `, [
       title || filename,
@@ -112,7 +112,8 @@ async function ingestOne({ buffer, filename, mime, category, tags, title }) {
       category || null,
       normTags,
       hash,
-      relPath
+      relPath,
+      filename  // original_name
     ]);
 
     return { id: rows[0].id, image: relPath };
@@ -164,7 +165,7 @@ async function ingestOne({ buffer, filename, mime, category, tags, title }) {
 // ===== Search (FTS) =====
 async function searchChunks({ q, categories = [], topK = 5 }) {
   const orig = String(q || '');
-   // NEU: Query aufräumen (Satzzeichen raus, kurze Wörter entfernen)
+    // NEU: Query aufräumen (Satzzeichen raus, kurze Wörter entfernen)
   const cleaned =
     orig
       .normalize('NFKD')
@@ -185,7 +186,7 @@ async function searchChunks({ q, categories = [], topK = 5 }) {
 
   const sql = `
     SELECT kc.id, kc.doc_id, kc.ord, kc.text,
-           kd.title, kd.filename, kd.category, kd.tags, kd.priority
+           kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name
     FROM knowledge_chunks kc
     JOIN knowledge_docs  kd ON kd.id = kc.doc_id
     WHERE ${where}
@@ -211,36 +212,36 @@ async function searchChunks({ q, categories = [], topK = 5 }) {
 
   let out = diversify(rows);
 
-    // --- Fallback, falls FTS nichts findet ---
-if (out.length === 0) {
-  // Query in Tokens zerlegen; Bindestriche/Spaces angleichen
-  const tokens = (cleaned || orig)
-    .replace(/[-\s]+/g, ' ')          // buy-in -> buy in
-    .split(/\s+/)
-    .filter(w => w.length >= 3);      // Kurz-Wörter raus
+     // --- Fallback, falls FTS nichts findet ---
+ if (out.length === 0) {
+   // Query in Tokens zerlegen; Bindestriche/Spaces angleichen
+   const tokens = (cleaned || orig)
+     .replace(/[-\s]+/g, ' ')          // buy-in -> buy in
+     .split(/\s+/)
+     .filter(w => w.length >= 3);      // Kurz-Wörter raus
 
-  const toks = tokens.length ? tokens : [ (cleaned || orig) ];
+   const toks = tokens.length ? tokens : [ (cleaned || orig) ];
 
-  // für jedes Token: (text ILIKE $n OR title ILIKE $n OR filename ILIKE $n OR tags ILIKE $n)
-  const clauses = [];
-  const params2 = [];
-  let p = 1;
+   // für jedes Token: (text ILIKE $n OR title ILIKE $n OR filename ILIKE $n OR tags ILIKE $n)
+   const clauses = [];
+   const params2 = [];
+   let p = 1;
 
-  for (const t of toks) {
-    const needle = `%${t}%`;
-    clauses.push(`(
-       kc.text ILIKE $${p} OR
-       kd.title ILIKE $${p+1} OR
-       kd.filename ILIKE $${p+2} OR
-       COALESCE(array_to_string(kd.tags, ','), '') ILIKE $${p+3}
-    )`);
-    params2.push(needle, needle, needle, needle);
-    p += 4;
-  }
+   for (const t of toks) {
+     const needle = `%${t}%`;
+     clauses.push(`(
+        kc.text ILIKE $${p} OR
+        kd.title ILIKE $${p+1} OR
+        kd.filename ILIKE $${p+2} OR
+        COALESCE(array_to_string(kd.tags, ','), '') ILIKE $${p+3}
+     )`);
+     params2.push(needle, needle, needle, needle);
+     p += 4;
+   }
 
 const sql2 = `
   SELECT kc.id, kc.doc_id, kc.ord, kc.text,
-         kd.title, kd.filename, kd.category, kd.tags, kd.priority
+         kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name
   FROM knowledge_chunks kc
   JOIN knowledge_docs  kd ON kd.id = kc.doc_id
   WHERE kd.enabled = TRUE
@@ -252,9 +253,52 @@ params2.push(topK);
 
 const { rows: rows2 } = await pool.query(sql2, params2);
 out = diversify(rows2);
-}
+ }
 
-  return out.slice(0, topK);
+  // === NEU: Suche auch nach Bildern (die keine Chunks haben) ===
+  const imageParams = [];
+  let imageWhere = 'kd.enabled = TRUE AND kd.image_url IS NOT NULL';
+  if (categories.length) {
+    imageWhere += ` AND kd.category = ANY($${imageParams.length + 1})`;
+    imageParams.push(categories);
+  }
+
+  // Suche nach Bildern basierend auf title, filename, original_name, tags, category
+  const imageClauses = [];
+  const imageParams2 = [];
+  let ip = 1;
+
+  for (const t of toks.length ? toks : [term]) {
+    const needle = `%${t}%`;
+    imageClauses.push(`(
+      kd.title ILIKE $${ip} OR
+      kd.filename ILIKE $${ip+1} OR
+      COALESCE(kd.original_name, '') ILIKE $${ip+2} OR
+      COALESCE(array_to_string(kd.tags, ','), '') ILIKE $${ip+3} OR
+      COALESCE(kd.category, '') ILIKE $${ip+4}
+    )`);
+    imageParams2.push(needle, needle, needle, needle, needle);
+    ip += 5;
+  }
+
+  const imageSql = `
+    SELECT kd.id as doc_id, NULL as id, NULL as ord, NULL as text,
+           kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name
+    FROM knowledge_docs kd
+    WHERE ${imageWhere}
+      ${imageClauses.length ? ' AND (' + imageClauses.join(' OR ') + ')' : ''}
+    ORDER BY kd.priority DESC, kd.id DESC
+    LIMIT $${ip};
+  `;
+  imageParams2.push(topK);
+
+  const { rows: imageRows } = await pool.query(imageSql, imageParams2);
+
+  // Kombiniere Text- und Bild-Ergebnisse, diversifiziere
+  const combined = [...out, ...imageRows];
+  const finalOut = diversify(combined);
+
+  return finalOut.slice(0, topK);
 }
 
 module.exports = { ingestOne, searchChunks };

@@ -55,6 +55,12 @@ router.post('/', upload.single('image'), async (req, res) => {
       VALUES ($1, 0, $2, $3)
     `, [docId, syntheticText, tokenCount]);
 
+    // === original_name setzen für Bot-Suche ===
+    await pool.query(
+      `UPDATE knowledge_docs SET original_name = $1 WHERE id = $2`,
+      [file.originalname, docId]
+    );
+
     return res.json({ success: true, filename });
   } catch (err) {
     console.error('[UPLOAD-IMG]', err);
