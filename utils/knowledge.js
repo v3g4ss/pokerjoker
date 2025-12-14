@@ -163,7 +163,7 @@ async function ingestOne({ buffer, filename, mime, category, tags, title }) {
 }
 
 // ===== Search (FTS) =====
-async function searchChunks({ q, categories = [], topK = 5 }) {
+async function searchChunks(q, categories = [], topK = 5) {
   const orig = String(q || '');
     // NEU: Query aufräumen (Satzzeichen raus, kurze Wörter entfernen)
   const cleaned =
