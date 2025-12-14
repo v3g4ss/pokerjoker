@@ -266,42 +266,42 @@ out = diversify(rows2);
   }
 
   // Suche nach Bildern basierend auf title, filename, original_name, tags, category
-  const imageClauses = [];
-  const imageParams2 = [];
-  let ip = 1;
+const imageClauses = [];
+const imageParams2 = [];
+let ip = 1;
 
-  for (const t of toks.length ? toks : [term]) {
-    const needle = `%${t}%`;
-    imageClauses.push(`(
-      kd.title ILIKE $${ip} OR
-      kd.filename ILIKE $${ip+1} OR
-      COALESCE(kd.original_name, '') ILIKE $${ip+2} OR
-      COALESCE(array_to_string(kd.tags, ','), '') ILIKE $${ip+3} OR
-      COALESCE(kd.category, '') ILIKE $${ip+4}
-    )`);
-    imageParams2.push(needle, needle, needle, needle, needle);
-    ip += 5;
-  }
+const toks = [term]; // <--- FIX: 'toks' definieren!
 
-  const imageSql = `
-    SELECT kd.id as doc_id, NULL as id, NULL as ord, NULL as text,
-           kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name,
-           kd.filename as source
-    FROM knowledge_docs kd
-    WHERE ${imageWhere}
-      ${imageClauses.length ? ' AND (' + imageClauses.join(' OR ') + ')' : ''}
-    ORDER BY kd.priority DESC, kd.id DESC
-    LIMIT $${ip};
-  `;
-  imageParams2.push(topK);
-
-  const { rows: imageRows } = await pool.query(imageSql, imageParams2);
-
-  // Kombiniere Text- und Bild-Ergebnisse, diversifiziere
-  const combined = [...out, ...imageRows];
-  const finalOut = diversify(combined);
-
-  return finalOut.slice(0, topK);
+for (const t of toks) {
+  const needle = `%${t}%`;
+  imageClauses.push(`(
+    kd.title ILIKE $${ip} OR
+    kd.filename ILIKE $${ip+1} OR
+    COALESCE(kd.original_name, '') ILIKE $${ip+2} OR
+    COALESCE(array_to_string(kd.tags, ','), '') ILIKE $${ip+3} OR
+    COALESCE(kd.category, '') ILIKE $${ip+4}
+  )`);
+  imageParams2.push(needle, needle, needle, needle, needle);
+  ip += 5;
 }
 
-module.exports = { ingestOne, searchChunks };
+const imageSql = `
+  SELECT kd.id as doc_id, NULL as id, NULL as ord, NULL as text,
+         kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name,
+         kd.filename as source
+  FROM knowledge_docs kd
+  WHERE ${imageWhere}
+    ${imageClauses.length ? ' AND (' + imageClauses.join(' OR ') + ')' : ''}
+  ORDER BY kd.priority DESC, kd.id DESC
+  LIMIT $${ip};
+`;
+imageParams2.push(topK);
+
+const { rows: imageRows } = await pool.query(imageSql, imageParams2);
+
+// Kombiniere Text- und Bild-Ergebnisse, diversifiziere
+const combined = [...out, ...imageRows];
+const finalOut = diversify(combined);
+
+return finalOut.slice(0, topK);
+
