@@ -57,28 +57,41 @@ async function getDocImageMeta(id) {
 // ===================================================================================
 router.get('/kb/img/:value', async (req, res) => {
   const value = req.params.value;
+  console.log('[DEBUG] Image request for:', value);
 
   let doc;
   if (/^\d+$/.test(value)) {
     // → ist ID
+    console.log('[DEBUG] Looking up by ID:', value);
     doc = await getDocImageMeta(parseInt(value, 10));
   } else {
     // → ist ein Dateiname
+    console.log('[DEBUG] Looking up by filename:', value);
+    const searchPath = '/uploads/knowledge/' + value;
+    console.log('[DEBUG] Searching for image_url:', searchPath);
     const q = await pool.query(
       'SELECT * FROM knowledge_docs WHERE image_url = $1 AND enabled = true',
-      ['/uploads/knowledge/' + value]
+      [searchPath]
     );
     doc = q.rows[0];
+    console.log('[DEBUG] Found doc:', doc ? 'YES' : 'NO', doc?.id);
   }
 
-  if (!doc || !doc.image_url) return res.status(404).send('Not found');
+  if (!doc || !doc.image_url) {
+    console.log('[DEBUG] No doc found or no image_url');
+    return res.status(404).send('Not found');
+  }
 
   const rel = normalizeRel(doc.image_url);
   const abs = path.join(__dirname, '..', 'public', rel);
+  console.log('[DEBUG] Normalized path:', rel);
+  console.log('[DEBUG] Absolute path:', abs);
 
   try {
     await fsp.access(abs);
-  } catch {
+    console.log('[DEBUG] File exists, sending...');
+  } catch (err) {
+    console.log('[DEBUG] File not found:', err.message);
     return res.status(404).send('Not found');
   }
 
