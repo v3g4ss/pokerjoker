@@ -66,7 +66,7 @@ router.get('/kb/img/:value', async (req, res) => {
     // → ist ein Dateiname
     const q = await pool.query(
       'SELECT * FROM knowledge_docs WHERE image_url = $1 AND enabled = true',
-      ['uploads/knowledge/' + value]
+      ['/uploads/knowledge/' + value]
     );
     doc = q.rows[0];
   }
