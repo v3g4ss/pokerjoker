@@ -96,7 +96,7 @@ async function handleChat(req, res) {
     let usedChunks = [];
     let answer     = '';
     let usedTokens = 0;
-    let imageUrls  = [];
+    let imageIds   = [];
 
     // ===== Knowledge-Retrieval =====
     if (mode !== 'LLM_ONLY') {
@@ -119,7 +119,7 @@ async function handleChat(req, res) {
           doc.title?.toLowerCase() === possibleFilename.toLowerCase()
         );
         if (fileDoc?.image_url) {
-          imageUrls = [`/api/admin/kb/img/${fileDoc.id}`];
+          imageIds = [fileDoc.id];
           answer = `Ich habe das Bild "${fileDoc.original_name || fileDoc.filename}" gefunden.`;
         }
       }
@@ -131,9 +131,9 @@ async function handleChat(req, res) {
         }));
 
         // max. 3 Bilder aus KB extrahieren
-        imageUrls = strong
-          .map(h => h.image_url)
-          .filter(u => typeof u === 'string' && u.startsWith('/'))
+        imageIds = strong
+          .filter(h => h.image_url)
+          .map(h => h.id)
           .slice(0, 3);
 
         // Kontexttext generieren
@@ -145,7 +145,7 @@ async function handleChat(req, res) {
         usedTokens = out.usedTokens;
 
         // Bilder im Text erwähnen
-        if (imageUrls.length) {
+        if (imageIds.length) {
           answer += `\n\nIch habe relevante Bilder gefunden.`;
         }
       }
@@ -215,7 +215,7 @@ async function handleChat(req, res) {
       balance: newBal,
       purchased,
       sources,
-      images: imageUrls,
+      images: imageIds,
       meta: { usedTokens, punctCount, punctRate, charged: toCharge }
     });
 
