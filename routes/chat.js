@@ -114,6 +114,7 @@ async function handleChat(req, res) {
       const possibleFilename = userText.split(/\s+/).find(w => /\.(jpg|jpeg|png|json|txt)$/i.test(w));
       if (possibleFilename) {
         const fileDoc = strong.find(doc =>
+          doc.label?.toLowerCase().includes(possibleFilename.toLowerCase()) || // <--- NEU
           doc.original_name?.toLowerCase() === possibleFilename.toLowerCase() ||
           doc.filename?.toLowerCase() === possibleFilename.toLowerCase() ||
           doc.title?.toLowerCase() === possibleFilename.toLowerCase()
