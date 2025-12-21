@@ -39,16 +39,14 @@ async function extractText(buffer, filename, mime = '') {
   const e = ext(filename);
 
   if (e === 'jsonl') {
-    const raw = buffer.toString('utf8');
-    return raw.split(/\r?\n/).filter(Boolean).join('\n');
+    return buffer.toString('utf8').split(/\r?\n/).filter(Boolean).join('\n');
   }
   if (['csv', 'md', 'txt', 'yaml', 'yml'].includes(e)) {
     return buffer.toString('utf8');
   }
   if (e === 'html' && JSDOM) {
-    const raw = buffer.toString('utf8');
-    const dom = new JSDOM(raw);
-    return dom.window.document.body.textContent || raw;
+    const dom = new JSDOM(buffer.toString('utf8'));
+    return dom.window.document.body.textContent || '';
   }
   if (e === 'pdf' && pdfParse) {
     const { text } = await pdfParse(buffer);
@@ -62,19 +60,22 @@ async function extractText(buffer, filename, mime = '') {
     const wb = xlsx.read(buffer, { type: 'buffer' });
     return wb.SheetNames.map(n => xlsx.utils.sheet_to_csv(wb.Sheets[n])).join('\n');
   }
-
   return buffer.toString('utf8');
 }
 
-async function ingestOne({ buffer, filename, mime, category, tags, title }) {
+/* =========================================================
+   INGEST
+========================================================= */
+async function ingestOne({ buffer, filename, mime, category, tags, title, label }) {
   const hash = sha(buffer);
   const e = ext(filename || '');
   const isImage = ['png', 'jpg', 'jpeg'].includes(e);
-  const normTags = (Array.isArray(tags) && tags.length) ? tags : null;
+  const normTags = Array.isArray(tags) && tags.length ? tags : null;
 
   const dupe = await pool.query('SELECT id FROM knowledge_docs WHERE hash=$1', [hash]);
   if (dupe.rows[0]) return { id: dupe.rows[0].id, skipped: true };
 
+  /* ---------- IMAGE ---------- */
   if (isImage || (mime && mime.startsWith('image/'))) {
     const imgName = `${Date.now()}-${String(filename).replace(/\s+/g, '_')}`;
     const relPath = `/uploads/knowledge/${imgName}`;
@@ -85,8 +86,8 @@ async function ingestOne({ buffer, filename, mime, category, tags, title }) {
 
     const { rows } = await pool.query(`
       INSERT INTO knowledge_docs
-        (title, filename, mime, size_bytes, category, tags, hash, image_url, original_name, created_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+        (title, filename, mime, size_bytes, category, tags, label, hash, image_url, original_name, created_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
       RETURNING id
     `, [
       title || filename,
@@ -95,6 +96,7 @@ async function ingestOne({ buffer, filename, mime, category, tags, title }) {
       buffer.length,
       category || null,
       normTags,
+      label || null,
       hash,
       relPath,
       filename
@@ -103,36 +105,40 @@ async function ingestOne({ buffer, filename, mime, category, tags, title }) {
     return { id: rows[0].id, image: relPath };
   }
 
+  /* ---------- TEXT ---------- */
   let content = await extractText(buffer, filename, mime) || '';
   if (content.length > MAX_TEXT_CHARS) content = content.slice(0, MAX_TEXT_CHARS);
-
   if (looksSecret(content)) console.warn('[knowledge] possible secret in', filename);
 
-  const ins = await pool.query(
-    `INSERT INTO knowledge_docs
-       (title, filename, mime, size_bytes, category, tags, hash, content, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
-     RETURNING id`,
-    [
-      title || filename,
-      filename,
-      mime || '',
-      buffer.length,
-      category || null,
-      normTags,
-      hash,
-      content
-    ]
-  );
-  const doc_id = ins.rows[0].id;
+  const ins = await pool.query(`
+    INSERT INTO knowledge_docs
+      (title, filename, mime, size_bytes, category, tags, label, hash, content, created_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+    RETURNING id
+  `, [
+    title || filename,
+    filename,
+    mime || '',
+    buffer.length,
+    category || null,
+    normTags,
+    label || null,
+    hash,
+    content
+  ]);
 
+  const doc_id = ins.rows[0].id;
   const chunks = chunkify(content);
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const q = `INSERT INTO knowledge_chunks (doc_id, ord, text, token_count) VALUES ($1,$2,$3,$4)`;
     for (const c of chunks) {
-      await client.query(q, [doc_id, c.ord, c.text, c.token_count]);
+      await client.query(
+        `INSERT INTO knowledge_chunks (doc_id, ord, text, token_count)
+         VALUES ($1,$2,$3,$4)`,
+        [doc_id, c.ord, c.text, c.token_count]
+      );
     }
     await client.query('COMMIT');
   } catch (e) {
@@ -145,18 +151,14 @@ async function ingestOne({ buffer, filename, mime, category, tags, title }) {
   return { id: doc_id, chunks: chunks.length };
 }
 
+/* =========================================================
+   SEARCH
+========================================================= */
 async function searchChunks(q, categories = [], topK = 5) {
-  const orig = String(q || '');
-  const cleaned = orig
-    .normalize('NFKD')
-    .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
-    .split(/\s+/)
-    .filter(w => w.length >= 3)
-    .join(' ')
-    .trim();
+  const term = String(q || '').trim();
+  if (!term) return [];
 
-  const term = cleaned || orig;
-
+  /* ---------- TEXT ---------- */
   const params = [term];
   let where = `kc.tsv @@ websearch_to_tsquery('simple', $1) AND kd.enabled = TRUE`;
   if (categories.length) {
@@ -166,115 +168,45 @@ async function searchChunks(q, categories = [], topK = 5) {
 
   const sql = `
     SELECT kc.id, kc.doc_id, kc.ord, kc.text,
-           kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name,
-           kd.filename as source
+           kd.title, kd.filename, kd.category, kd.tags, kd.label,
+           kd.priority, kd.image_url, kd.original_name,
+           kd.filename AS source
     FROM knowledge_chunks kc
-    JOIN knowledge_docs  kd ON kd.id = kc.doc_id
+    JOIN knowledge_docs kd ON kd.id = kc.doc_id
     WHERE ${where}
-    ORDER BY
-      kd.priority DESC,
-      ts_rank(kc.tsv, websearch_to_tsquery('simple', $1)) DESC,
-      kc.id DESC
+    ORDER BY kd.priority DESC, kc.id DESC
     LIMIT $${params.length + 1};
   `;
   params.push(topK);
 
   const { rows } = await pool.query(sql, params);
+  let out = rows;
 
-  const diversify = (arr) => {
-    const out = [], byDoc = new Map();
-    for (const r of arr) {
-      const n = byDoc.get(r.doc_id) || 0;
-      if (n < 2) { out.push(r); byDoc.set(r.doc_id, n + 1); }
-      if (out.length >= topK) break;
-    }
-    return out;
-  };
-
-  let out = diversify(rows);
-
-  if (out.length === 0) {
-    const tokens = (cleaned || orig)
-      .replace(/[-\s]+/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length >= 3);
-    const toks = tokens.length ? tokens : [cleaned || orig];
-
-    const clauses = [];
-    const params2 = [];
-    let p = 1;
-
-    for (const t of toks) {
-      const needle = `%${t}%`;
-      clauses.push(`(
-        kc.text ILIKE $${p} OR
-        kd.title ILIKE $${p+1} OR
-        kd.filename ILIKE $${p+2} OR
-        COALESCE(array_to_string(kd.tags, ','), '') ILIKE $${p+3}
-      )`);
-      params2.push(needle, needle, needle, needle);
-      p += 4;
-    }
-
-    const sql2 = `
-      SELECT kc.id, kc.doc_id, kc.ord, kc.text,
-             kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name,
-             kd.filename as source
-      FROM knowledge_chunks kc
-      JOIN knowledge_docs  kd ON kd.id = kc.doc_id
-      WHERE kd.enabled = TRUE
-        ${clauses.length ? ' AND (' + clauses.join(' OR ') + ')' : ''}
-      ORDER BY kd.priority DESC, kc.id DESC
-      LIMIT $${p};
-    `;
-    params2.push(topK);
-    const { rows: rows2 } = await pool.query(sql2, params2);
-    out = diversify(rows2);
-  }
-
-  // === Bilder durchsuchen ===
-  const imageParams = [];
-  let imageWhere = 'kd.enabled = TRUE AND kd.image_url IS NOT NULL';
-  if (categories.length) {
-    imageWhere += ` AND kd.category = ANY($${imageParams.length + 1})`;
-    imageParams.push(categories);
-  }
-
-  const toks = [term];
-  const imageClauses = [];
-  const imageParams2 = [];
-  let ip = 1;
-
-  for (const t of toks) {
-    const needle = `%${t}%`;
-    imageClauses.push(`(
-      kd.title ILIKE $${ip} OR
-      kd.filename ILIKE $${ip+1} OR
-      COALESCE(kd.original_name, '') ILIKE $${ip+2} OR
-      COALESCE(array_to_string(kd.tags, ','), '') ILIKE $${ip+3} OR
-      COALESCE(kd.category, '') ILIKE $${ip+4}
-    )`);
-    imageParams2.push(needle, needle, needle, needle, needle);
-    ip += 5;
-  }
-
-  const imageSql = `
-    SELECT kd.id as id, NULL as ord, NULL as text,
-           kd.title, kd.filename, kd.category, kd.tags, kd.priority, kd.image_url, kd.original_name,
-           kd.filename as source
+  /* ---------- IMAGE FALLBACK ---------- */
+  const needle = `%${term}%`;
+  const imgSql = `
+    SELECT kd.id, NULL AS ord, NULL AS text,
+           kd.title, kd.filename, kd.category, kd.tags, kd.label,
+           kd.priority, kd.image_url, kd.original_name,
+           kd.filename AS source
     FROM knowledge_docs kd
-    WHERE ${imageWhere}
-      ${imageClauses.length ? ' AND (' + imageClauses.join(' OR ') + ')' : ''}
+    WHERE kd.enabled = TRUE
+      AND kd.image_url IS NOT NULL
+      AND (
+        kd.title ILIKE $1 OR
+        kd.filename ILIKE $1 OR
+        kd.original_name ILIKE $1 OR
+        COALESCE(array_to_string(kd.tags, ','), '') ILIKE $1 OR
+        COALESCE(kd.label, '') ILIKE $1
+      )
     ORDER BY kd.priority DESC, kd.id DESC
-    LIMIT $${ip};
+    LIMIT $2;
   `;
-  imageParams2.push(topK);
 
-  const { rows: imageRows } = await pool.query(imageSql, imageParams2);
-  const combined = [...out, ...imageRows];
-  const finalOut = diversify(combined);
+  const { rows: imgs } = await pool.query(imgSql, [needle, topK]);
+  out = [...out, ...imgs];
 
-  return finalOut.slice(0, topK);
+  return out.slice(0, topK);
 }
 
 module.exports = { ingestOne, searchChunks };

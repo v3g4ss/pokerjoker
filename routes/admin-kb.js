@@ -121,6 +121,7 @@ router.post('/kb/upload',
     const category = (req.body?.category || '').toString().trim() || null;
     const tags     = toArr(req.body?.tags);
     const caption  = (req.body?.caption || '').toString().trim();
+    const label    = (req.body?.label || '').toString().trim();
 
     try {
       const buffer = fs.readFileSync(tmpPath);
@@ -133,6 +134,7 @@ router.post('/kb/upload',
         category,
         tags,
         title
+        label  // <--- NEU!
       });
 
       // Falls Bild: optionale Caption speichern
