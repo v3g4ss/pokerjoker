@@ -174,12 +174,14 @@ function appendMessage(sender, text, save = true) {
   chatBox.appendChild(msg);  
 }
 
-function renderImageMessage(imageUrl) {
-  const fullUrl = `/api/admin/kb/img/${encodeURIComponent(imageUrl)}`;
+function renderImageMessage(imageId) {
   const img = document.createElement('img');
-  img.src = fullUrl;
+  img.src = `/api/admin/kb/img/${imageId}`;
   img.alt = 'Bild';
   img.classList.add('chat-image');
+
+  img.addEventListener('click', () => showImageModal(img.src));
+
   appendMessage('bot', img.outerHTML);
 }
 

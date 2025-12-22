@@ -171,6 +171,53 @@ if (out?.id && out?.image && caption) {
   }
 );
 
+  // ===================================================================================
+// POST /api/admin/kb/image   (NUR Bilder für Bot-Visuals)
+// Pflicht: file, title, tags
+// ===================================================================================
+router.post('/kb/image',
+  requireAuth,
+  requireAdmin,
+  upload.single('file'),
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ ok: false, error: 'Keine Datei' });
+    }
+
+    const { title, caption, tags } = req.body;
+    if (!title || !tags) {
+      return res.status(400).json({ ok: false, error: 'Titel und Tags sind Pflicht' });
+    }
+
+    try {
+      const buffer = fs.readFileSync(req.file.path);
+      rmSafe(req.file.path);
+
+      const out = await ingestOne({
+        buffer,
+        filename: req.file.originalname,
+        mime: req.file.mimetype,
+        category: 'Bilder',          // 🔥 FEST
+        tags: toArr(tags),           // 🔥 PFLICHT
+        title: title.toString(),
+        label: null
+      });
+
+      if (out?.id && caption) {
+        await pool.query(
+          'UPDATE knowledge_docs SET image_caption=$1 WHERE id=$2',
+          [caption.toString(), out.id]
+        );
+      }
+
+      res.json({ ok: true, id: out?.id });
+    } catch (err) {
+      console.error('[KB IMAGE]', err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  }
+);
+
 // ===================================================================================
 /**
  * GET /api/admin/kb/list?page=1&limit=20&q=term
