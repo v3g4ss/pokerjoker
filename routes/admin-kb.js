@@ -194,16 +194,20 @@ router.post('/kb/image',
       rmSafe(req.file.path);
 
       const out = await ingestOne({
-        buffer,
-        filename: req.file.originalname,
-        mime: req.file.mimetype,
-        category: 'Bilder',          // 🔥 FEST
-        tags: toArr(tags),           // 🔥 PFLICHT
-        title: title.toString(),
-        label: null
-      });
+  buffer,
+  filename: req.file.originalname,
+  mime: req.file.mimetype,
+  category: 'Bilder',
+  tags: toArr(tags),
+  title: title.toString(),
+  label: null
+});
 
-      if (out?.id) {
+// 🔥 JETZT erst löschen
+rmSafe(req.file.path);
+
+// 🔥 EINMALIGES Update
+if (out?.id) {
   const tagArr = toArr(tags);
 
   await pool.query(
@@ -217,7 +221,7 @@ router.post('/kb/image',
     `,
     [
       tagArr,
-      tagArr[0] || null,          // label = erstes Tag
+      tagArr[0] || null,
       caption ? caption.toString() : null,
       out.id
     ]
