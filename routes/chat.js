@@ -89,35 +89,37 @@ async function llmAnswer({ userText, context, systemPrompt, model, temperature }
 }
 
 // =======================
-// Chat Handler
+// Chat Handler (FINAL)
 // =======================
 async function handleChat(req, res) {
   try {
     const uid = req.user?.id || req.session?.user?.id;
     const userText = (req.body?.message || '').trim();
 
-    if (!req.session) req.session = {};
     if (!uid) return res.status(401).json({ ok:false, reply:'Nicht eingeloggt.' });
     if (!userText) return res.status(400).json({ ok:false, reply:'' });
 
-    // ===== Bild-Zustimmung (Modus B) =====
-    // GANZ AM ANFANG von handleChat
-      if (req.session?.imageOffer) {
-        const yes = /^(ja|yes|klar|ok|zeig|zeigen)/i.test(userText);
-        if (yes) {
-          const imgId = await loadImageByText(req.session.imageOffer.text);
-          req.session.imageOffer = null;
+    // =======================
+    // Modus B – Zustimmung (GANZ AM ANFANG)
+    // =======================
+    req._imageOffer ??= null;
 
-          return res.json({
-            ok: true,
-            reply: 'Alles klar 👇',
-            images: imgId ? [imgId] : [],
-            sources: []
-          });
-        }
-      }
+    const yes = /(ja|yes|klar|ok|zeig|zeige|zeigen|grafik)/i.test(userText);
+    if (req._imageOffer && yes) {
+      const imgId = await loadImageByText(req._imageOffer.text);
+      req._imageOffer = null;
 
-    // ===== Balance prüfen =====
+      return res.json({
+        ok: true,
+        reply: 'Alles klar 👇',
+        images: imgId ? [imgId] : [],
+        sources: []
+      });
+    }
+
+    // =======================
+    // Balance prüfen
+    // =======================
     const balRes = await pool.query(
       `SELECT balance, purchased FROM public.v_user_balances_live WHERE user_id=$1`,
       [uid]
@@ -134,25 +136,29 @@ async function handleChat(req, res) {
       });
     }
 
-    // ===== Bot Config =====
+    // =======================
+    // Bot Config / System Prompt
+    // =======================
     const cfg  = await getBotConfig(uid);
     const sys = `
-    Du bist Poker Joker.
-    Du erklärst Poker klar und freundlich.
+Du bist Poker Joker.
+Du erklärst Poker klar und freundlich.
 
-    WICHTIG:
-    - Du sagst NIEMALS, dass du keine Bilder oder Grafiken anzeigen kannst.
-    - Wenn visuelle Inhalte hilfreich sind, wartest du auf System-Anweisungen.
-    - Bilder werden IMMER vom System eingeblendet, nicht von dir erklärt.
+WICHTIG:
+- Du sagst NIEMALS, dass du keine Bilder oder Grafiken anzeigen kannst.
+- Bilder werden IMMER vom System eingeblendet.
+- Du wartest auf System-Anweisungen für visuelle Inhalte.
     `.trim();
+
     const mdl  = cfg?.model || 'gpt-4o-mini';
     const temp = typeof cfg?.temperature === 'number' ? cfg.temperature : 0.3;
 
     let answer = '';
-    let usedTokens = 0;
     let usedChunks = [];
 
-    // ===== Knowledge Retrieval =====
+    // =======================
+    // Knowledge Retrieval
+    // =======================
     const hits = await searchChunks(userText, TOP_K);
     const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
 
@@ -176,10 +182,11 @@ async function handleChat(req, res) {
       });
 
       answer = out.text;
-      usedTokens = out.usedTokens;
     }
 
-    // ===== Fallback LLM =====
+    // =======================
+    // Fallback LLM
+    // =======================
     if (!answer) {
       const out = await llmAnswer({
         userText,
@@ -189,17 +196,19 @@ async function handleChat(req, res) {
         temperature: temp
       });
       answer = out.text;
-      usedTokens = out.usedTokens;
     }
 
-    // ===== Modus B: Bild anbieten =====
-    const tags = extractTags(userText);
-      if (!req.session.imageOffer && await hasImagesByText(userText)) {
-        req.session.imageOffer = { text: userText };
-        answer += '\n\n👉 Willst du dazu eine passende Grafik sehen?';
-      }
+    // =======================
+    // Modus B – Bild anbieten (NUR WENN KEIN OFFER AKTIV)
+    // =======================
+    if (!req._imageOffer && await hasImagesByText(userText)) {
+      req._imageOffer = { text: userText };
+      answer += '\n\n👉 Willst du dazu eine passende Grafik sehen?';
+    }
 
-    // ===== Tokenverbrauch =====
+    // =======================
+    // Tokenverbrauch
+    // =======================
     const words = answer.split(/\s+/).length || 1;
     const punct = (answer.match(/[.!?,;:]/g) || []).length;
     const rate  = Number(cfg?.punct_rate ?? 1);
@@ -207,10 +216,11 @@ async function handleChat(req, res) {
     const charge = Math.min(Math.ceil((words + punct) * rate), max);
 
     await tokenDb.consumeTokens(uid, charge, `chat usage`);
-
     const after = await tokenDb.getTokens(uid);
 
-    // ===== History =====
+    // =======================
+    // History
+    // =======================
     await pool.query(`
       INSERT INTO chat_history (user_id, role, message)
       VALUES ($1,'user',$2),($1,'assistant',$3)
