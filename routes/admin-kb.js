@@ -41,6 +41,12 @@ function normalizeRel(rel) {
   return String(rel || '').replace(/^\/+/, '');
 }
 
+function isAllowedUploadPath(rel) {
+  // Prevent path traversal / arbitrary file reads.
+  const s = String(rel || '').replace(/\\/g, '/');
+  return s.startsWith('uploads/knowledge/');
+}
+
 /** Lese image_url & enabled für ein Doc */
 async function getDocImageMeta(id) {
   const { rows } = await pool.query(
@@ -83,17 +89,38 @@ router.get('/kb/img/:value', async (req, res) => {
   }
 
   const rel = normalizeRel(doc.image_url);
-  const abs = path.join(__dirname, '..', 'public', rel);
-  console.log('[DEBUG] Normalized path:', rel);
-  console.log('[DEBUG] Absolute path:', abs);
-
-  try {
-    await fsp.access(abs);
-    console.log('[DEBUG] File exists, sending...');
-  } catch (err) {
-    console.log('[DEBUG] File not found:', err.message);
+  if (!isAllowedUploadPath(rel)) {
+    console.log('[DEBUG] Blocked non-knowledge path:', rel);
     return res.status(404).send('Not found');
   }
+
+  // Primary location (correct): <project>/public/uploads/knowledge/...
+  const absPublic = path.join(__dirname, '..', 'public', rel);
+
+  // Fallback #1: <project>/uploads/knowledge/... (in case something saved outside /public)
+  const absProject = path.join(__dirname, '..', rel);
+
+  // Fallback #2 (Windows bug from earlier versions): <driveRoot>\uploads\knowledge\...
+  const driveRoot = path.parse(__dirname).root;
+  const absDriveRoot = path.join(driveRoot, rel);
+
+  const candidates = [absPublic, absProject, absDriveRoot];
+  let abs = null;
+  for (const p of candidates) {
+    try {
+      await fsp.access(p);
+      abs = p;
+      break;
+    } catch {}
+  }
+
+  if (!abs) {
+    console.log('[DEBUG] File not found in any candidate location:', candidates);
+    return res.status(404).send('Not found');
+  }
+  console.log('[DEBUG] Normalized path:', rel);
+  console.log('[DEBUG] Absolute path:', abs);
+  console.log('[DEBUG] File exists, sending...');
 
   return res.sendFile(abs);
 });

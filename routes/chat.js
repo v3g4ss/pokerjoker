@@ -19,43 +19,68 @@ const TOP_K = 6;
 // =======================
 // Helpers – Bilder Modus B
 // =======================
-function extractTags(text) {
-  const map = ['preflop','range','cashgame','postflop','tilt','mental'];
-  const t = (text || '').toLowerCase();
-  return map.filter(k => t.includes(k));
+function buildLikePatterns(text) {
+  const raw = String(text || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]+/gu, ' ');
+
+  const parts = raw.split(/\s+/).map(s => s.trim()).filter(Boolean);
+  const keep = parts.filter(w => w.length >= 3);
+  const uniq = Array.from(new Set(keep));
+
+  // If user enters a very short query, still keep the full phrase.
+  if (!uniq.length && raw.trim()) uniq.push(raw.trim());
+
+  return uniq.map(w => `%${w}%`);
 }
 
-async function hasImagesByText(text) {
-  const r = await pool.query(`
-    SELECT 1
-    FROM knowledge_docs
-    WHERE enabled=true
-      AND image_url IS NOT NULL
-      AND EXISTS (
-        SELECT 1
-        FROM unnest(tags) t
-        WHERE $1 ILIKE '%' || t || '%'
-      )
-    LIMIT 1
-  `, [text]);
-  return r.rowCount > 0;
-}
+async function findImageIdsByQuery(text, limit = 3) {
+  const patterns = buildLikePatterns(text);
+  if (!patterns.length) return [];
 
-async function loadImageByText(text) {
-  const r = await pool.query(`
+  const r = await pool.query(
+    `
     SELECT id
     FROM knowledge_docs
-    WHERE enabled=true
+    WHERE enabled = true
       AND image_url IS NOT NULL
-      AND EXISTS (
-        SELECT 1
-        FROM unnest(tags) t
-        WHERE $1 ILIKE '%' || t || '%'
+      AND (
+        title ILIKE ANY($1) OR
+        filename ILIKE ANY($1) OR
+        original_name ILIKE ANY($1) OR
+        COALESCE(label, '') ILIKE ANY($1) OR
+        COALESCE(array_to_string(tags, ','), '') ILIKE ANY($1)
       )
-    ORDER BY priority DESC
-    LIMIT 1
-  `, [text]);
-  return r.rows[0]?.id || null;
+    ORDER BY priority DESC, id DESC
+    LIMIT $2;
+    `,
+    [patterns, limit]
+  );
+
+  return r.rows.map(x => x.id);
+}
+
+function stripNoImageClaims(text) {
+  // Remove typical "I can't show images" disclaimers (German/English) that confuse users,
+  // because the UI *can* render images.
+  let t = String(text || '');
+
+  // 1) Whole-sentence removals.
+  t = t.replace(
+    /(^|\n)\s*[^\n.]{0,200}(kann|können)[^\n.]{0,120}(bild|bilder|grafik|grafiken|image|images)[^\n.]{0,120}(nicht|leider|cannot|can't)[^\n.]*[.?!](?=\s|$)/gim,
+    '$1'
+  );
+
+  // 2) Mid-sentence clause removals like:
+  // "Ich kann dir die Grafik nicht direkt zeigen, aber …"
+  t = t.replace(
+    /(ich\s+(kann|können)[^\n]{0,120}(bild|bilder|grafik|grafiken|image|images)[^\n]{0,120}(nicht|leider|cannot|can't)[^\n]{0,120}(zeigen|anzeigen|display|show)[^\n]{0,80})(\s*[,;:]\s*)?/gim,
+    ''
+  );
+
+  // Cleanup whitespace artifacts.
+  t = t.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n');
+  return t.trim();
 }
 
 // =======================
@@ -102,19 +127,30 @@ async function handleChat(req, res) {
     // =======================
     // Modus B – Zustimmung (GANZ AM ANFANG)
     // =======================
-    req._imageOffer ??= null;
+    // NOTE: request objects are recreated on every HTTP call.
+    // Persist the image offer state in the session, otherwise the "Ja" answer can't work.
+    if (req.session) req.session.imageOffer ??= null;
 
-    const yes = /(ja|yes|klar|ok|zeig|zeige|zeigen|grafik)/i.test(userText);
-    if (req._imageOffer && yes) {
-      const imgId = await loadImageByText(req._imageOffer.text);
-      req._imageOffer = null;
+    const yes = /(\bja\b|\byes\b|klar|ok|\bzeig\b|zeige|zeigen|grafik|bild)/i.test(userText);
+    const no = /(\bnein\b|\bno\b|nicht|später|lass|egal)/i.test(userText);
+
+    if (req.session?.imageOffer && yes) {
+      const ids = Array.isArray(req.session.imageOffer.imageIds)
+        ? req.session.imageOffer.imageIds
+        : [];
+      req.session.imageOffer = null;
 
       return res.json({
         ok: true,
-        reply: 'Alles klar 👇',
-        images: imgId ? [imgId] : [],
+        reply: 'Alles klar – ich blende dir die Grafik ein 👇',
+        images: ids,
         sources: []
       });
+    }
+
+    if (req.session?.imageOffer && no) {
+      req.session.imageOffer = null;
+      // Continue as normal (user doesn't want the image).
     }
 
     // =======================
@@ -148,6 +184,7 @@ WICHTIG:
 - Du sagst NIEMALS, dass du keine Bilder oder Grafiken anzeigen kannst.
 - Bilder werden IMMER vom System eingeblendet.
 - Du wartest auf System-Anweisungen für visuelle Inhalte.
+ - Wenn der User eine Grafik will, sag: "Alles klar – ich blende dir die passende Grafik ein." (ohne Disclaimer)
     `.trim();
 
     const mdl  = cfg?.model || 'gpt-4o-mini';
@@ -159,11 +196,12 @@ WICHTIG:
     // =======================
     // Knowledge Retrieval
     // =======================
-    const hits = await searchChunks(userText, TOP_K);
+    // searchChunks(q, categories=[], topK=5)
+    const hits = await searchChunks(userText, [], TOP_K);
     const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
 
-    // Collect image IDs from search results
-    const imageIds = strong.filter(h => h.image_url).map(h => h.id);
+    // Image candidates (for offer or direct show)
+    const imageCandidates = await findImageIdsByQuery(userText, 3);
 
     if (strong.length) {
       usedChunks = strong.map(h => ({
@@ -201,12 +239,27 @@ WICHTIG:
       answer = out.text;
     }
 
+    // Scrub misleading "can't show images" claims.
+    answer = stripNoImageClaims(answer);
+
     // =======================
     // Modus B – Bild anbieten (NUR WENN KEIN OFFER AKTIV)
     // =======================
-    if (!req._imageOffer && await hasImagesByText(userText)) {
-      req._imageOffer = { text: userText };
-      answer += '\n\n👉 Willst du dazu eine passende Grafik sehen?';
+    const wantsImageNow = /(grafik|bild|zeige|zeig|image)/i.test(userText);
+
+    // If the user explicitly asks for an image, show it immediately.
+    // Otherwise offer it and wait for confirmation (stored in session).
+    if (imageCandidates.length) {
+      if (wantsImageNow) {
+        // show immediately
+      } else if (req.session && !req.session.imageOffer) {
+        req.session.imageOffer = {
+          text: userText,
+          imageIds: imageCandidates,
+          createdAt: Date.now()
+        };
+        answer += '\n\n👉 Willst du dazu eine passende Grafik sehen? (Ja/Nein)';
+      }
     }
 
     // =======================
@@ -235,7 +288,7 @@ WICHTIG:
       balance: after.balance,
       purchased,
       sources: usedChunks,
-      images: imageIds
+      images: wantsImageNow ? imageCandidates : []
     });
 
   } catch (err) {

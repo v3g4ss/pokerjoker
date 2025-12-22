@@ -11,6 +11,12 @@ try { xlsx = require('xlsx'); } catch {}
 
 const MAX_TEXT_CHARS = 400_000;
 
+// Normalizes a DB relative path like '/uploads/knowledge/x.png' to 'uploads/knowledge/x.png'
+// so path.join does not jump to drive root.
+function normalizeRel(rel) {
+  return String(rel || '').replace(/^\/+/g, '');
+}
+
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const ext = (name = '') => (name.split('.').pop() || '').toLowerCase();
 const looksSecret = (s) => /(api[_-]?key|bearer|sk-|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.)/i.test(s);
@@ -79,7 +85,7 @@ async function ingestOne({ buffer, filename, mime, category, tags, title, label 
   if (isImage || (mime && mime.startsWith('image/'))) {
     const imgName = `${Date.now()}-${String(filename).replace(/\s+/g, '_')}`;
     const relPath = `/uploads/knowledge/${imgName}`;
-    const absPath = path.join(__dirname, '..', 'public', relPath);
+    const absPath = path.join(__dirname, '..', 'public', normalizeRel(relPath));
 
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
     fs.writeFileSync(absPath, buffer);
@@ -110,23 +116,25 @@ async function ingestOne({ buffer, filename, mime, category, tags, title, label 
   if (content.length > MAX_TEXT_CHARS) content = content.slice(0, MAX_TEXT_CHARS);
   if (looksSecret(content)) console.warn('[knowledge] possible secret in', filename);
 
-  const ins = await pool.query(`
-  INSERT INTO knowledge_docs
-    (title, filename, mime, size_bytes, category, tags, hash, image_url, original_name, label, created_at)
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
-  RETURNING id
-`, [
-  title || filename,
-  filename,
-  mime || `image/${e || 'png'}`,
-  buffer.length,
-  category || null,
-  normTags,
-  hash,
-  relPath,
-  filename,
-  label || null   // <--- NEU!
-]);
+  const ins = await pool.query(
+    `
+    INSERT INTO knowledge_docs
+      (title, filename, mime, size_bytes, category, tags, hash, image_url, original_name, label, created_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9,NOW())
+    RETURNING id
+    `,
+    [
+      title || filename,
+      filename,
+      mime || 'application/octet-stream',
+      buffer.length,
+      category || null,
+      normTags,
+      hash,
+      filename,
+      label || null
+    ]
+  );
 
   const doc_id = ins.rows[0].id;
   const chunks = chunkify(content);
