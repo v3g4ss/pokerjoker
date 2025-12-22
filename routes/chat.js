@@ -162,6 +162,9 @@ WICHTIG:
     const hits = await searchChunks(userText, TOP_K);
     const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
 
+    // Collect image IDs from search results
+    const imageIds = strong.filter(h => h.image_url).map(h => h.id);
+
     if (strong.length) {
       usedChunks = strong.map(h => ({
         id: h.id,
@@ -232,7 +235,7 @@ WICHTIG:
       balance: after.balance,
       purchased,
       sources: usedChunks,
-      images: []
+      images: imageIds
     });
 
   } catch (err) {
