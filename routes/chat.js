@@ -96,6 +96,7 @@ async function handleChat(req, res) {
     const uid = req.user?.id || req.session?.user?.id;
     const userText = (req.body?.message || '').trim();
 
+    if (!req.session) req.session = {};
     if (!uid) return res.status(401).json({ ok:false, reply:'Nicht eingeloggt.' });
     if (!userText) return res.status(400).json({ ok:false, reply:'' });
 
