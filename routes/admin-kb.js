@@ -203,12 +203,26 @@ router.post('/kb/image',
         label: null
       });
 
-      if (out?.id && caption) {
-        await pool.query(
-          'UPDATE knowledge_docs SET image_caption=$1 WHERE id=$2',
-          [caption.toString(), out.id]
-        );
-      }
+      if (out?.id) {
+  const tagArr = toArr(tags);
+
+  await pool.query(
+    `
+    UPDATE knowledge_docs
+    SET
+      tags = $1,
+      label = $2,
+      image_caption = $3
+    WHERE id = $4
+    `,
+    [
+      tagArr,
+      tagArr[0] || null,          // label = erstes Tag
+      caption ? caption.toString() : null,
+      out.id
+    ]
+  );
+}
 
       res.json({ ok: true, id: out?.id });
     } catch (err) {
