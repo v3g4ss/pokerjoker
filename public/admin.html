@@ -508,34 +508,48 @@ input[type=checkbox].blue-check:checked::after {
     <!-- 🖼️ Grafik-Upload für Knowledge Base -->
 <div class="card" id="kbImageUploadCard">
   <h3>📷 Bild zur Knowledge Base hochladen</h3>
+
   <form id="imgUploadForm" enctype="multipart/form-data">
-    <input type="file" name="image" accept=".png,.jpg,.jpeg" required><br>
-    <input type="text" name="title" placeholder="Titel eingeben" required><br>
-    <input type="text" name="description" placeholder="Kurzbeschreibung eingeben" required><br>
-    <input type="text" name="label" placeholder="Such-Label (z.B. „Preflop Chart“) eingeben" required><br>
+    <input type="file" id="imgFile" accept=".png,.jpg,.jpeg" required>
+
+    <input type="text" id="imgTitle" placeholder="Titel" required>
+
+    <input type="text" id="imgDesc" placeholder="Kurzbeschreibung">
+
+    <!-- 🔥 DAS FEHLTE -->
+    <input type="text" id="imgTags"
+           placeholder="Tags (z. B. preflop, range, cashgame)"
+           required>
+
     <button type="submit">Bild hochladen</button>
   </form>
 </div>
 
+
 <script>
-  document.getElementById('imgUploadForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const formData = new FormData(form);
+document.getElementById('imgUploadForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
 
-    const res = await fetch('/api/admin/upload-img', {
-      method: 'POST',
-      body: formData
-    });
+  const fd = new FormData();
+  fd.append('file', document.getElementById('imgFile').files[0]);
+  fd.append('title', document.getElementById('imgTitle').value);
+  fd.append('caption', document.getElementById('imgDesc').value);
+  fd.append('tags', document.getElementById('imgTags').value);
 
-    const data = await res.json();
-    if (data.success) {
-      alert('✅ Bild erfolgreich hochgeladen!');
-      form.reset();
-    } else {
-      alert('❌ Fehler beim Upload!');
-    }
+  const res = await fetch('/api/admin/kb/image', {
+    method: 'POST',
+    credentials: 'include',
+    body: fd
   });
+
+  const j = await res.json();
+  if (j.ok) {
+    alert('✅ Bild gespeichert');
+    e.target.reset();
+  } else {
+    alert('❌ ' + (j.error || 'Fehler'));
+  }
+});
 </script>
 
   <!-- Untermenüs -->
