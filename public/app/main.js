@@ -175,14 +175,37 @@ function appendMessage(sender, text, save = true) {
 }
 
 function renderImageMessage(imageId) {
+  // IMPORTANT:
+  // Do NOT use img.outerHTML + innerHTML insertion, because that drops all JS event listeners.
+  // We must append the real DOM node to keep click-to-open working.
+  if (!chatBox) return;
+
+  const msg = document.createElement('div');
+  msg.classList.add('message', 'bot');
+  msg.innerHTML = `<strong>🤖 Poker Joker:</strong><br>`;
+
   const img = document.createElement('img');
-  img.src = `/api/admin/kb/img/${imageId}`;
+  img.src = `/api/admin/kb/img/${encodeURIComponent(String(imageId))}`;
   img.alt = 'Bild';
   img.classList.add('chat-image');
+  img.style.cursor = 'pointer';
 
   img.addEventListener('click', () => showImageModal(img.src));
+  img.addEventListener('error', () => {
+    // Fallback: show a clickable link if the image cannot be loaded.
+    const a = document.createElement('a');
+    a.href = img.src;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = '📷 Bild öffnen';
+    a.style.color = '#ffcc00';
+    a.style.textDecoration = 'underline';
+    img.replaceWith(a);
+  });
 
-  appendMessage('bot', img.outerHTML);
+  msg.appendChild(img);
+  chatBox.appendChild(msg);
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 // === Bild-Modal ===
