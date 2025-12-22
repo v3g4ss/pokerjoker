@@ -133,7 +133,7 @@ router.post('/kb/upload',
         mime,
         category,
         tags,
-        title
+        title,
         label  // <--- NEU!
       });
 
@@ -163,15 +163,6 @@ if (out?.id && out?.image && caption) {
       filename: original,
       size
     });
-
-      res.json({
-        ok: true,
-        id: out?.id,
-        chunks: out?.chunks ?? 0,
-        image: out?.image || null,
-        filename: original,
-        size
-      });
     } catch (err) {
       rmSafe(tmpPath);
       console.error('[KB upload] error:', err);
