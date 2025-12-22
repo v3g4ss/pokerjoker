@@ -25,29 +25,36 @@ function extractTags(text) {
   return map.filter(k => t.includes(k));
 }
 
-async function hasImages(tags) {
-  if (!tags.length) return false;
+async function hasImagesByText(text) {
   const r = await pool.query(`
     SELECT 1
     FROM knowledge_docs
-    WHERE category='Bilder'
-      AND enabled=true
-      AND tags && $1
+    WHERE enabled=true
+      AND image_url IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM unnest(tags) t
+        WHERE $1 ILIKE '%' || t || '%'
+      )
     LIMIT 1
-  `, [tags]);
+  `, [text]);
   return r.rowCount > 0;
 }
 
-async function loadImage(tags) {
+async function loadImageByText(text) {
   const r = await pool.query(`
     SELECT id
     FROM knowledge_docs
-    WHERE category='Bilder'
-      AND enabled=true
-      AND tags && $1
+    WHERE enabled=true
+      AND image_url IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM unnest(tags) t
+        WHERE $1 ILIKE '%' || t || '%'
+      )
     ORDER BY priority DESC
     LIMIT 1
-  `, [tags]);
+  `, [text]);
   return r.rows[0]?.id || null;
 }
 
@@ -93,8 +100,8 @@ async function handleChat(req, res) {
     if (!userText) return res.status(400).json({ ok:false, reply:'' });
 
     // ===== Bild-Zustimmung (Modus B) =====
-    if (req.session?.imageOffer && /^(ja|yes|klar|gerne|ok)/i.test(userText)) {
-      const imgId = await loadImage(req.session.imageOffer.tags);
+    if (req.session?.imageOffer && /^(ja|yes|klar|gerne|ok|zeig|zeigen)/i.test(userText)) {
+      const imgId = await loadImageByText(req.session.imageOffer.text);
       req.session.imageOffer = null;
 
       return res.json({
@@ -124,7 +131,15 @@ async function handleChat(req, res) {
 
     // ===== Bot Config =====
     const cfg  = await getBotConfig(uid);
-    const sys  = cfg?.system_prompt || 'Du bist Poker Joker. Antworte knapp.';
+    const sys = `
+    Du bist Poker Joker.
+    Du erklärst Poker klar und freundlich.
+
+    WICHTIG:
+    - Du sagst NIEMALS, dass du keine Bilder oder Grafiken anzeigen kannst.
+    - Wenn visuelle Inhalte hilfreich sind, wartest du auf System-Anweisungen.
+    - Bilder werden IMMER vom System eingeblendet, nicht von dir erklärt.
+    `.trim();
     const mdl  = cfg?.model || 'gpt-4o-mini';
     const temp = typeof cfg?.temperature === 'number' ? cfg.temperature : 0.3;
 
@@ -174,10 +189,10 @@ async function handleChat(req, res) {
 
     // ===== Modus B: Bild anbieten =====
     const tags = extractTags(userText);
-    if (await hasImages(tags)) {
-      req.session.imageOffer = { tags };
-      answer += '\n\n👉 Willst du dazu eine passende Grafik sehen?';
-    }
+      if (await hasImagesByText(userText)) {
+    req.session.imageOffer = { text: userText };
+    answer += '\n\n👉 Willst du dazu eine passende Grafik sehen?';
+  }
 
     // ===== Tokenverbrauch =====
     const words = answer.split(/\s+/).length || 1;
