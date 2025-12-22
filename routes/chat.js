@@ -101,17 +101,21 @@ async function handleChat(req, res) {
     if (!userText) return res.status(400).json({ ok:false, reply:'' });
 
     // ===== Bild-Zustimmung (Modus B) =====
-    if (req.session?.imageOffer && /^(ja|yes|klar|gerne|ok|zeig|zeigen)/i.test(userText)) {
-      const imgId = await loadImageByText(req.session.imageOffer.text);
-      req.session.imageOffer = null;
+    // GANZ AM ANFANG von handleChat
+      if (req.session?.imageOffer) {
+        const yes = /^(ja|yes|klar|ok|zeig|zeigen)/i.test(userText);
+        if (yes) {
+          const imgId = await loadImageByText(req.session.imageOffer.text);
+          req.session.imageOffer = null;
 
-      return res.json({
-        ok: true,
-        reply: 'Alles klar 👇',
-        images: imgId ? [imgId] : [],
-        sources: []
-      });
-    }
+          return res.json({
+            ok: true,
+            reply: 'Alles klar 👇',
+            images: imgId ? [imgId] : [],
+            sources: []
+          });
+        }
+      }
 
     // ===== Balance prüfen =====
     const balRes = await pool.query(
@@ -190,10 +194,10 @@ async function handleChat(req, res) {
 
     // ===== Modus B: Bild anbieten =====
     const tags = extractTags(userText);
-      if (await hasImagesByText(userText)) {
-    req.session.imageOffer = { text: userText };
-    answer += '\n\n👉 Willst du dazu eine passende Grafik sehen?';
-  }
+      if (!req.session.imageOffer && await hasImagesByText(userText)) {
+        req.session.imageOffer = { text: userText };
+        answer += '\n\n👉 Willst du dazu eine passende Grafik sehen?';
+      }
 
     // ===== Tokenverbrauch =====
     const words = answer.split(/\s+/).length || 1;
