@@ -111,21 +111,22 @@ async function ingestOne({ buffer, filename, mime, category, tags, title, label 
   if (looksSecret(content)) console.warn('[knowledge] possible secret in', filename);
 
   const ins = await pool.query(`
-    INSERT INTO knowledge_docs
-      (title, filename, mime, size_bytes, category, tags, label, hash, content, created_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
-    RETURNING id
-  `, [
-    title || filename,
-    filename,
-    mime || '',
-    buffer.length,
-    category || null,
-    normTags,
-    label || null,
-    hash,
-    content
-  ]);
+  INSERT INTO knowledge_docs
+    (title, filename, mime, size_bytes, category, tags, hash, image_url, original_name, label, created_at)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+  RETURNING id
+`, [
+  title || filename,
+  filename,
+  mime || `image/${e || 'png'}`,
+  buffer.length,
+  category || null,
+  normTags,
+  hash,
+  relPath,
+  filename,
+  label || null   // <--- NEU!
+]);
 
   const doc_id = ins.rows[0].id;
   const chunks = chunkify(content);
