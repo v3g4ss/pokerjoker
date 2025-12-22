@@ -9,6 +9,7 @@ const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const http = require('http');
 const compression = require('compression');
+const session = require('express-session'); // ✅ NEU
 const { pool } = require('./db');
 const { sendMailSafe: sendMail } = require('./utils/mailer');
 const requireAuth = require('./middleware/requireAuth');
@@ -40,6 +41,22 @@ app.use(require('./middleware/logger'));
 app.use(compression()); // Gzip/Brotli Kompression
 app.use(express.json({ limit: '1mb' }));
 
+// =======================
+// SERVER SESSION (NEU – WICHTIG)
+// =======================
+app.use(session({
+  name: 'pokerjoker.sid',
+  secret: process.env.SESSION_SECRET || 'pokerjoker-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'none',   // passt zu deinem JWT-Cookie
+    secure: true,       // Render = HTTPS
+    maxAge: 1000 * 60 * 10 // 10 Minuten (nur Chat-State)
+  }
+}));
+
 // === Session-Cookie Handling ===
 // JWT wird in Cookies gespeichert, also wichtig: SameSite = none + secure
 app.use((req, res, next) => {
@@ -47,10 +64,10 @@ app.use((req, res, next) => {
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.cookie('session', token, {
       httpOnly: true,
-      sameSite: 'none', // Muss 'none' sein für HTTPS & cross-site
-      secure: true,     // Render läuft immer mit HTTPS
+      sameSite: 'none',
+      secure: true,
       path: '/',
-      maxAge: 1000 * 60 * 60 * 24 * 7 // 7 Tage
+      maxAge: 1000 * 60 * 60 * 24 * 7
     });
   };
   next();
@@ -87,7 +104,6 @@ app.use('/api/admin', adminMenuRoutes);
 app.use('/api/admin/payconfig', adminPayConfig);
 app.use('/api/admin/upload-img', require('./routes/admin-upload-img'));
 
-
 // --- User APIs ---
 const chatRoutes = require('./routes/chat');
 const menuRoutes = require('./routes/menu');
@@ -107,9 +123,9 @@ app.use('/api/password', passwordRouter);
 
 // --- Static Files (mit Browser-Caching) ---
 const staticOptions = {
-  maxAge: '1h',           // Browser cached 1 Stunde
-  etag: true,            // ETag für Validierung
-  lastModified: true     // Last-Modified Header
+  maxAge: '1h',
+  etag: true,
+  lastModified: true
 };
 app.use(express.static(path.join(__dirname, 'public'), staticOptions));
 app.use('/app', express.static(path.join(__dirname, 'public', 'app'), staticOptions));
@@ -177,6 +193,7 @@ const doLogout = (req, res) => {
   try {
     res.clearCookie('session', opts);
     res.clearCookie('sid', opts);
+    req.session?.destroy(() => {});
     console.log('✅ Logout: Cookies wurden entfernt');
     res.json({ ok: true });
   } catch (err) {
