@@ -4,6 +4,7 @@ const router = express.Router();
 const { pool } = require('../db');
 const requireAuth = require('../middleware/requireAuth');
 const requireAdmin = require('../middleware/requireAdmin');
+const { invalidateBotConfigCache } = require('../utils/botConfig');
 
 let OpenAI = null;
 try { ({ OpenAI } = require('openai')); } catch (_) {}
@@ -106,6 +107,8 @@ router.put('/prompt', requireAuth, requireAdmin, async (req, res) => {
     `, [system_prompt || '', t, m, km, pr, maxTok, req.user?.id || null]);
 
     await pool.query('COMMIT');
+    // Ensure live bot sees updates immediately (getBotConfig() has a cache).
+    invalidateBotConfigCache();
     res.json({ ok: true });
   } catch (err) {
     await pool.query('ROLLBACK').catch(() => {});

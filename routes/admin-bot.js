@@ -5,6 +5,7 @@ const router  = express.Router();
 const requireAuth  = require('../middleware/requireAuth');
 const requireAdmin = require('../middleware/requireAdmin');
 const { pool }     = require('../db');
+const { invalidateBotConfigCache } = require('../utils/botConfig');
 
 // Liefert/Setzt den globalen Chat-Modus in bot_settings. Werte:
 // KB_ONLY | KB_PREFERRED | LLM_ONLY
@@ -19,6 +20,7 @@ router.put('/bot-mode', requireAuth, requireAdmin, async (req,res)=>{
   const allowed = ['KB_ONLY','KB_PREFERRED','LLM_ONLY'];
   if (!allowed.includes(m)) return res.status(400).json({ ok:false, error:'invalid mode' });
   await pool.query(`UPDATE bot_settings SET knowledge_mode=$1`, [m]);
+  invalidateBotConfigCache();
   res.json({ ok:true });
 });
 

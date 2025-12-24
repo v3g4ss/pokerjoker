@@ -16,6 +16,16 @@ const MIN_BALANCE_TO_CHAT = 100;
 const MIN_MATCH_SCORE = 0.75;
 const TOP_K = 6;
 
+const KNOWLEDGE_MODES = new Set(['KB_ONLY', 'KB_PREFERRED', 'LLM_ONLY']);
+
+function normalizeKnowledgeMode(raw) {
+  const v = String(raw || '').trim().toUpperCase();
+  // Backwards compatibility with older admin UI values.
+  if (v === 'ALWAYS') return 'KB_ONLY';
+  if (v === 'ON-DEMAND' || v === 'ON_DEMAND' || v === 'ONDEMAND') return 'KB_PREFERRED';
+  return KNOWLEDGE_MODES.has(v) ? v : 'KB_PREFERRED';
+}
+
 // =======================
 // Helpers – Bilder Modus B
 // =======================
@@ -93,7 +103,14 @@ async function llmAnswer({ userText, context, systemPrompt, model, temperature }
   if (context) {
     msgs.push({
       role:'system',
-      content:`NUTZE AUSSCHLIESSLICH DIESES WISSEN:\n${context}`
+      content: [
+        'WISSENSBASIS (Knowledge Library) – VERBINDLICH:',
+        context,
+        '',
+        'REGELN:',
+        '- Verwende ausschließlich die Wissensbasis oben (keine externen Fakten, kein allgemeines Weltwissen).',
+        '- Wenn etwas nicht in der Wissensbasis steht: sag das klar und stelle Rückfragen statt zu raten.'
+      ].join('\n')
     });
   }
 
@@ -111,6 +128,58 @@ async function llmAnswer({ userText, context, systemPrompt, model, temperature }
     Math.ceil((userText.length + text.length) / 4);
 
   return { text, usedTokens };
+}
+
+function safeJsonParse(s) {
+  try { return JSON.parse(String(s || '')); } catch { return null; }
+}
+
+// KB-only answering: enforce that the assistant can ONLY answer using verbatim quotes from KB context.
+// If it cannot, we return an empty answer.
+async function llmKbOnlyAnswer({ userText, context, systemPrompt, model, temperature }) {
+  const msgs = [];
+  msgs.push({
+    role: 'system',
+    content: [
+      systemPrompt || 'Du bist Poker Joker.',
+      '',
+      'STRICT KB MODE:',
+      '- Output MUST be valid JSON only.',
+      '- Schema: {"answer": string, "quotes": string[]}',
+      '- "quotes" MUST contain exact verbatim substrings copied from the provided knowledge context.',
+      '- If you cannot answer strictly from the knowledge context, respond with {"answer":"","quotes":[]}.',
+      '- Do NOT use general world knowledge.'
+    ].join('\n')
+  });
+
+  msgs.push({
+    role: 'system',
+    content: `KNOWLEDGE_CONTEXT\n${context || ''}`
+  });
+
+  msgs.push({ role: 'user', content: userText });
+
+  const r = await openai.chat.completions.create({
+    model: model || 'gpt-4o-mini',
+    temperature: typeof temperature === 'number' ? temperature : 0,
+    messages: msgs
+  });
+
+  const raw = r?.choices?.[0]?.message?.content?.trim() || '';
+  const obj = safeJsonParse(raw);
+  if (!obj || typeof obj !== 'object') return { text: '', usedTokens: r?.usage?.total_tokens };
+
+  const answer = typeof obj.answer === 'string' ? obj.answer.trim() : '';
+  const quotes = Array.isArray(obj.quotes) ? obj.quotes.filter(q => typeof q === 'string' && q.trim()) : [];
+
+  // Must have at least one quote and all quotes must be present in context.
+  if (!answer || !quotes.length) return { text: '', usedTokens: r?.usage?.total_tokens };
+  const ctx = String(context || '');
+  for (const q of quotes) {
+    if (!ctx.includes(q)) return { text: '', usedTokens: r?.usage?.total_tokens };
+  }
+
+  return { text: answer, usedTokens: r?.usage?.total_tokens };
 }
 
 // =======================
@@ -175,29 +244,45 @@ async function handleChat(req, res) {
     // =======================
     // Bot Config / System Prompt
     // =======================
-    const cfg  = await getBotConfig(uid);
-    const sys = `
+    const cfg  = await getBotConfig();
+    const mode = normalizeKnowledgeMode(cfg?.knowledge_mode);
+
+    const fallbackSys = `
 Du bist Poker Joker.
 Du erklärst Poker klar und freundlich.
 
-WICHTIG:
+UI-WICHTIG:
 - Du sagst NIEMALS, dass du keine Bilder oder Grafiken anzeigen kannst.
 - Bilder werden IMMER vom System eingeblendet.
 - Du wartest auf System-Anweisungen für visuelle Inhalte.
- - Wenn der User eine Grafik will, sag: "Alles klar – ich blende dir die passende Grafik ein." (ohne Disclaimer)
+- Wenn der User eine Grafik will, sag: "Alles klar – ich blende dir die passende Grafik ein." (ohne Disclaimer)
     `.trim();
+
+    // Prompt-Playground / DB prompt should be the primary system prompt.
+    // We append non-negotiable UI rules to avoid image-disclaimer confusion.
+    const sys = [
+      (cfg?.system_prompt || '').trim() || fallbackSys,
+      '---',
+      // Ensure these always apply even when admin prompt is changed.
+      'UI-CONSTRAINTS:',
+      '- Never claim you cannot show images/graphics; the UI can render them.',
+      '- If the user asks for a graphic, acknowledge and wait for the system to display it.'
+    ].join('\n');
 
     const mdl  = cfg?.model || 'gpt-4o-mini';
     const temp = typeof cfg?.temperature === 'number' ? cfg.temperature : 0.3;
 
     let answer = '';
     let usedChunks = [];
+    let answerSource = 'none';
 
     // =======================
     // Knowledge Retrieval
     // =======================
     // searchChunks(q, categories=[], topK=5)
-    const hits = await searchChunks(userText, [], TOP_K);
+    const hits = (mode === 'LLM_ONLY') ? [] : await searchChunks(userText, [], TOP_K);
+    // searchChunks() currently does not provide numeric relevance scores.
+    // Keep the previous behavior (treat any hit as usable) unless a score exists.
     const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
 
     // Image candidates (for offer or direct show)
@@ -214,21 +299,18 @@ WICHTIG:
       let context = strong.map(h => h.text).filter(Boolean).join('\n---\n');
       if (context.length > 2000) context = context.slice(0, 2000);
 
-      const out = await llmAnswer({
-        userText,
-        context,
-        systemPrompt: sys,
-        model: mdl,
-        temperature: temp
-      });
+      const out = (mode === 'KB_ONLY')
+        ? await llmKbOnlyAnswer({ userText, context, systemPrompt: sys, model: mdl, temperature: 0 })
+        : await llmAnswer({ userText, context, systemPrompt: sys, model: mdl, temperature: temp });
 
       answer = out.text;
+      if (answer) answerSource = (mode === 'KB_ONLY') ? 'kb_only_llm_strict' : 'kb_llm';
     }
 
     // =======================
     // Fallback LLM
     // =======================
-    if (!answer) {
+    if (!answer && mode !== 'KB_ONLY') {
       const out = await llmAnswer({
         userText,
         context: null,
@@ -237,6 +319,27 @@ WICHTIG:
         temperature: temp
       });
       answer = out.text;
+      if (answer) answerSource = 'fallback_llm';
+    }
+
+    // KB_ONLY: never call the model without context.
+    if (!answer && mode === 'KB_ONLY') {
+      if (!hits?.length) {
+        console.log('[chat] KB_ONLY: no KB hits for query (fallback blocked)');
+      }
+      answer = [
+        'Dazu finde ich in meiner Knowledge-Bibliothek aktuell kein passendes Wissen.',
+        'Formuliere die Frage bitte anders oder nenne konkrete Stichworte (z.B. Hand, Spot, Stackgröße, Position).'
+      ].join(' ');
+      answerSource = 'kb_only_no_answer';
+    }
+
+    if (mode === 'KB_ONLY') {
+      console.log('[chat] KB_ONLY result', {
+        hits: (hits || []).length,
+        strong: (strong || []).length,
+        answerSource
+      });
     }
 
     // Scrub misleading "can't show images" claims.

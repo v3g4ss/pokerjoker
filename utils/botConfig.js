@@ -3,11 +3,16 @@ const { pool } = require('../db');
 
 let cache = null, cacheTS = 0;
 
+function invalidateBotConfigCache() {
+  cache = null;
+  cacheTS = 0;
+}
+
 async function getBotConfig() {
   const now = Date.now();
   if (cache && now - cacheTS < 300_000) return cache; // 5 Min Cache (vorher 10s)
  const { rows } = await pool.query(`
-  SELECT system_prompt, temperature, model, knowledge_mode, punct_rate, max_usedtokens_per_msg
+  SELECT system_prompt, temperature, model, knowledge_mode, punct_rate, max_usedtokens_per_msg, version
   FROM bot_settings WHERE id=1
 `);
   cache = rows[0];
@@ -31,7 +36,7 @@ async function setBotConfig({ system_prompt, temperature, model }, adminUserId) 
     VALUES ($1,$2,$3,$4,$5)
   `, [system_prompt, temperature, model, nextVer, adminUserId]);
 
-  cache = null; // Cache invalidieren
+  invalidateBotConfigCache();
 }
 
-module.exports = { getBotConfig, setBotConfig };
+module.exports = { getBotConfig, setBotConfig, invalidateBotConfigCache };

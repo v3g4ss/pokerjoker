@@ -11,6 +11,33 @@ try { xlsx = require('xlsx'); } catch {}
 
 const MAX_TEXT_CHARS = 400_000;
 
+let _tsvWritable = null;
+async function isKnowledgeChunksTsvWritable() {
+  if (_tsvWritable !== null) return _tsvWritable;
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT is_generated
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'knowledge_chunks'
+        AND column_name = 'tsv'
+      LIMIT 1;
+      `
+    );
+    if (!rows?.length) {
+      _tsvWritable = false;
+      return _tsvWritable;
+    }
+    // Generated columns cannot be written.
+    _tsvWritable = String(rows[0].is_generated || '').toUpperCase() !== 'ALWAYS';
+    return _tsvWritable;
+  } catch {
+    _tsvWritable = false;
+    return _tsvWritable;
+  }
+}
+
 // Normalizes a DB relative path like '/uploads/knowledge/x.png' to 'uploads/knowledge/x.png'
 // so path.join does not jump to drive root.
 function normalizeRel(rel) {
@@ -142,12 +169,23 @@ async function ingestOne({ buffer, filename, mime, category, tags, title, label 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const writeTsv = await isKnowledgeChunksTsvWritable();
     for (const c of chunks) {
-      await client.query(
-        `INSERT INTO knowledge_chunks (doc_id, ord, text, token_count)
-         VALUES ($1,$2,$3,$4)`,
-        [doc_id, c.ord, c.text, c.token_count]
-      );
+      if (writeTsv) {
+        await client.query(
+          `
+          INSERT INTO knowledge_chunks (doc_id, ord, text, token_count, tsv)
+          VALUES ($1,$2,$3,$4, to_tsvector('simple', coalesce($3, '')))
+          `,
+          [doc_id, c.ord, c.text, c.token_count]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO knowledge_chunks (doc_id, ord, text, token_count)
+           VALUES ($1,$2,$3,$4)`,
+          [doc_id, c.ord, c.text, c.token_count]
+        );
+      }
     }
     await client.query('COMMIT');
   } catch (e) {
