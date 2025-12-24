@@ -29,13 +29,15 @@ function normalizeKnowledgeMode(raw) {
 // =======================
 // Helpers – Bilder Modus B
 // =======================
+const SHORT_IMAGE_TOKENS = new Set(['bb','sb','ai','utg','mp','co','btn','hj','ip','oop','3b','4b','5b']);
+
 function buildLikePatterns(text) {
   const raw = String(text || '')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s_-]+/gu, ' ');
 
   const parts = raw.split(/\s+/).map(s => s.trim()).filter(Boolean);
-  const keep = parts.filter(w => w.length >= 3);
+  const keep = parts.filter(w => w.length >= 3 || (w.length >= 2 && SHORT_IMAGE_TOKENS.has(w)));
   const uniq = Array.from(new Set(keep));
 
   // If user enters a very short query, still keep the full phrase.
