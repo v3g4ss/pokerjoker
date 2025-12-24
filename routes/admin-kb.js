@@ -16,14 +16,17 @@ const router = express.Router();
 const TMP = path.join(__dirname, '..', 'uploads_tmp');
 fs.mkdirSync(TMP, { recursive: true });
 
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, TMP),
-    filename: (_req, file, cb) =>
-      cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_'))
-  }),
-  limits: { fileSize: 25 * 1024 * 1024 } // 25MB
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, KB_DISK_DIR);
+  },
+  filename: (req, file, cb) => {
+    const safe = (file.originalname || 'file').replace(/[^\w.\-]+/g, '_');
+    cb(null, `${Date.now()}-${safe}`);
+  }
 });
+
+const upload = multer({ storage });
 
 // ===== Helpers =====
 const toArr = (csv) =>
@@ -62,75 +65,79 @@ async function getDocImageMeta(id) {
 //  - liefert 404, wenn Doc nicht existiert, nicht enabled oder kein image_url
 // ===================================================================================
 router.get('/kb/img/:value', async (req, res) => {
-  const value = req.params.value;
-  console.log('[DEBUG] Image request for:', value);
+  try {
+    const value = req.params.value;
+    console.log('[DEBUG] Image request for:', value);
 
-  let doc;
-  if (/^\d+$/.test(value)) {
-    // → ist ID
-    console.log('[DEBUG] Looking up by ID:', value);
-    doc = await getDocImageMeta(parseInt(value, 10));
-  } else {
-    // → ist ein Dateiname
-    console.log('[DEBUG] Looking up by filename:', value);
-    const searchPath = '/uploads/knowledge/' + value;
-    console.log('[DEBUG] Searching for image_url:', searchPath);
-    const q = await pool.query(
-      'SELECT * FROM knowledge_docs WHERE image_url = $1 AND enabled = true',
-      [searchPath]
-    );
-    doc = q.rows[0];
-    console.log('[DEBUG] Found doc:', doc ? 'YES' : 'NO', doc?.id);
+    let doc;
+    if (/^\d+$/.test(value)) {
+      // → ist ID
+      console.log('[DEBUG] Looking up by ID:', value);
+      doc = await getDocImageMeta(parseInt(value, 10));
+    } else {
+      // → ist ein Dateiname
+      console.log('[DEBUG] Looking up by filename:', value);
+
+      // WICHTIG: In der DB steht image_url i.d.R. als "uploads/knowledge/<file>"
+      // oder "/uploads/knowledge/<file>" – wir suchen robust nach beidem.
+      const p1 = 'uploads/knowledge/' + value;
+      const p2 = '/uploads/knowledge/' + value;
+
+      const q = await pool.query(
+        `SELECT * FROM knowledge_docs
+         WHERE enabled = true
+           AND (image_url = $1 OR image_url = $2)
+         LIMIT 1`,
+        [p1, p2]
+      );
+
+      doc = q.rows[0];
+      console.log('[DEBUG] Found doc:', doc ? 'YES' : 'NO', doc?.id);
+    }
+
+    if (!doc || !doc.image_url) {
+      console.log('[DEBUG] No doc found or no image_url');
+      return res.status(404).send('Not found');
+    }
+
+    const rel = normalizeRel(doc.image_url); // z.B. "uploads/knowledge/123-file.jpg"
+    if (!isAllowedUploadPath(rel)) {
+      console.log('[DEBUG] Blocked non-knowledge path:', rel);
+      return res.status(404).send('Not found');
+    }
+
+    // filename aus rel ziehen, damit wir auf /data/... mappen können
+    const filename = path.basename(rel);
+
+    // ✅ Persistent Disk (dein Mount-Path ist /data/uploads/knowledge)
+    const absDisk = path.join('/data/uploads/knowledge', filename);
+
+    // Fallbacks (Altbestand / lokale Pfade)
+    const absPublic = path.join(process.cwd(), 'public', rel);
+    const absProject = path.join(process.cwd(), rel);
+
+    const candidates = [absDisk, absPublic, absProject];
+
+    let foundPath = null;
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        foundPath = p;
+        break;
+      }
+    }
+
+    if (!foundPath) {
+      console.warn('[KB IMG] File not found in any location:', candidates);
+      return res.status(404).send('Image not found');
+    }
+
+    console.log('[DEBUG] Serving image from:', foundPath);
+    return res.sendFile(foundPath);
+  } catch (err) {
+    console.error('[KB IMG] Error:', err);
+    return res.status(500).send('Server error');
   }
-
-  if (!doc || !doc.image_url) {
-    console.log('[DEBUG] No doc found or no image_url');
-    return res.status(404).send('Not found');
-  }
-
-  const rel = normalizeRel(doc.image_url);
-  if (!isAllowedUploadPath(rel)) {
-    console.log('[DEBUG] Blocked non-knowledge path:', rel);
-    return res.status(404).send('Not found');
-  }
-
-  // Primary location (correct): <project>/public/uploads/knowledge/...
-  const absPublic = path.join(__dirname, '..', 'public', rel);
-
-  // Fallback #1: <project>/uploads/knowledge/... (in case something saved outside /public)
-  const absProject = path.join(__dirname, '..', rel);
-
-  // Fallback #2 (Windows bug from earlier versions): <driveRoot>\uploads\knowledge\...
-  const driveRoot = path.parse(__dirname).root;
-  const absDriveRoot = path.join(driveRoot, rel);
-
-  const fs = require('fs');
-const path = require('path');
-
-// filename kommt aus der DB, z. B. "1766609274402-downswing_after_good_start.jpg"
-const filename = file;
-
-const candidates = [
-  path.join('/data/uploads/knowledge', filename),                  // ✅ Persistent Disk (Render)
-  path.join(process.cwd(), 'public/uploads/knowledge', filename),  // Fallback (alt)
-  path.join(process.cwd(), 'uploads/knowledge', filename)          // Legacy
-];
-
-let foundPath = null;
-
-for (const p of candidates) {
-  if (fs.existsSync(p)) {
-    foundPath = p;
-    break;
-  }
-}
-
-if (!foundPath) {
-  console.warn('[KB IMG] File not found in any location:', candidates);
-  return res.status(404).send('Image not found');
-}
-
-return res.sendFile(foundPath);
+});
 
 
 // ===================================================================================
