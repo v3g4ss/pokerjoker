@@ -13,8 +13,11 @@ const { ingestOne } = require('../utils/knowledge');
 const router = express.Router();
 
 // ===== Multer: temporäres Upload-Verzeichnis =====
-const TMP = path.join(__dirname, '..', 'uploads_tmp');
 fs.mkdirSync(TMP, { recursive: true });
+
+// ===== Knowledge Upload Base Dir (Render Persistent Disk) =====
+const KB_DISK_DIR = '/data/uploads/knowledge';
+fs.mkdirSync(KB_DISK_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -138,7 +141,6 @@ router.get('/kb/img/:value', async (req, res) => {
     return res.status(500).send('Server error');
   }
 });
-
 
 // ===================================================================================
 // POST /api/admin/kb/upload   (multipart/form-data; field "file")
@@ -390,8 +392,11 @@ router.delete('/kb/:id', requireAuth, requireAdmin, async (req, res) => {
 
     if (img && img.startsWith('/uploads/knowledge/')) {
       const rel = normalizeRel(img);
-      const full = path.join(__dirname, '..', 'public', rel);
-      rmSafe(full);
+      const filename = path.basename(rel);
+
+      rmSafe(path.join('/data/uploads/knowledge', filename));                 // Persistent
+      rmSafe(path.join(__dirname, '..', 'public', rel));                      // Fallback alt
+      rmSafe(path.join(__dirname, '..', rel));                                // Legacy
     }
 
     res.json({ ok: true, deleted: rowCount });
@@ -401,6 +406,5 @@ router.delete('/kb/:id', requireAuth, requireAdmin, async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
   });
-});
 
 module.exports = router;
