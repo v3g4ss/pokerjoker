@@ -104,26 +104,33 @@ router.get('/kb/img/:value', async (req, res) => {
   const driveRoot = path.parse(__dirname).root;
   const absDriveRoot = path.join(driveRoot, rel);
 
-  const candidates = [absPublic, absProject, absDriveRoot];
-  let abs = null;
-  for (const p of candidates) {
-    try {
-      await fsp.access(p);
-      abs = p;
-      break;
-    } catch {}
-  }
+  const fs = require('fs');
+const path = require('path');
 
-  if (!abs) {
-    console.log('[DEBUG] File not found in any candidate location:', candidates);
-    return res.status(404).send('Not found');
-  }
-  console.log('[DEBUG] Normalized path:', rel);
-  console.log('[DEBUG] Absolute path:', abs);
-  console.log('[DEBUG] File exists, sending...');
+// filename kommt aus der DB, z. B. "1766609274402-downswing_after_good_start.jpg"
+const filename = file;
 
-  return res.sendFile(abs);
-});
+const candidates = [
+  path.join('/data/uploads/knowledge', filename),                  // ✅ Persistent Disk (Render)
+  path.join(process.cwd(), 'public/uploads/knowledge', filename),  // Fallback (alt)
+  path.join(process.cwd(), 'uploads/knowledge', filename)          // Legacy
+];
+
+let foundPath = null;
+
+for (const p of candidates) {
+  if (fs.existsSync(p)) {
+    foundPath = p;
+    break;
+  }
+}
+
+if (!foundPath) {
+  console.warn('[KB IMG] File not found in any location:', candidates);
+  return res.status(404).send('Image not found');
+}
+
+return res.sendFile(foundPath);
 
 
 // ===================================================================================
