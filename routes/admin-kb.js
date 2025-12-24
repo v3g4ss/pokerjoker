@@ -393,6 +393,7 @@ router.delete('/kb/:id', requireAuth, requireAdmin, async (req, res) => {
     console.error('[KB delete] error:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
+  });
 });
 
 module.exports = router;
