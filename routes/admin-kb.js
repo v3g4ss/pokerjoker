@@ -113,15 +113,14 @@ router.get('/kb/img/:value', async (req, res) => {
     const filename = path.basename(rel);
 
     // ✅ Persistent Disk (dein Mount-Path ist /data/uploads/knowledge)
-   const rel = normalizeRel(doc.image_url); // z.B. "uploads/knowledge/123-file.jpg"
-    if (!isAllowedUploadPath(rel)) {
-      console.log('[DEBUG] Blocked non-knowledge path:', rel);
+   const relPath = normalizeRel(doc.image_url); // z.B. "uploads/knowledge/123-file.jpg"
+    if (!isAllowedUploadPath(relPath)) {
+      console.log('[DEBUG] Blocked non-knowledge path:', relPath);
       return res.status(404).send('Not found');
     }
 
-    const filename = path.basename(rel); // ✅ HINZUGEFÜGT
+    const filename = path.basename(relPath);
     const absDisk = path.join('/data/uploads/knowledge', filename);
-
 
     // Fallbacks (Altbestand / lokale Pfade)
     const absPublic = path.join(process.cwd(), 'public', rel);
