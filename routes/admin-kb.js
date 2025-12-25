@@ -1,7 +1,6 @@
 // routes/admin-kb.js
 const express = require('express');
 const fs = require('fs');
-const fsp = require('fs/promises');
 const path = require('path');
 const multer = require('multer');
 
@@ -13,15 +12,27 @@ const { ingestOne } = require('../utils/knowledge');
 const router = express.Router();
 
 // ===== Multer: temporäres Upload-Verzeichnis =====
-fs.mkdirSync(TMP, { recursive: true });
+// Wichtig: Uploads werden (kurzzeitig) in ein temp-dir geschrieben und nach `ingestOne()` wieder gelöscht.
+// Bilder werden innerhalb von `utils/knowledge.ingestOne()` final gespeichert (Render Persistent Disk /data).
+const TMP_DIR = process.env.UPLOAD_TMP_DIR || path.join(process.cwd(), 'uploads_tmp');
+fs.mkdirSync(TMP_DIR, { recursive: true });
 
 // ===== Knowledge Upload Base Dir (Render Persistent Disk) =====
-const KB_DISK_DIR = '/data/uploads/knowledge';
-fs.mkdirSync(KB_DISK_DIR, { recursive: true });
+// Wird primär für Bild-Auslieferung & Delete-Fallbacks genutzt.
+// Unter Windows (lokal) nicht auf /data schreiben.
+const DEFAULT_KB_DISK_DIR = process.platform === 'win32'
+  ? path.join(process.cwd(), 'public', 'uploads', 'knowledge')
+  : '/data/uploads/knowledge';
+const KB_DISK_DIR = process.env.KB_DISK_DIR || DEFAULT_KB_DISK_DIR;
+try {
+  fs.mkdirSync(KB_DISK_DIR, { recursive: true });
+} catch (e) {
+  console.warn('[admin-kb] cannot mkdir KB_DISK_DIR:', KB_DISK_DIR, e?.message);
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, KB_DISK_DIR);
+    cb(null, TMP_DIR);
   },
   filename: (req, file, cb) => {
     const safe = (file.originalname || 'file').replace(/[^\w.\-]+/g, '_');
@@ -103,28 +114,23 @@ router.get('/kb/img/:value', async (req, res) => {
       return res.status(404).send('Not found');
     }
 
-    const rel = normalizeRel(doc.image_url); // z.B. "uploads/knowledge/123-file.jpg"
-    if (!isAllowedUploadPath(rel)) {
-      console.log('[DEBUG] Blocked non-knowledge path:', rel);
+    // For the ID lookup we also have `enabled`. Enforce it for public access.
+    if (doc.enabled === false) {
       return res.status(404).send('Not found');
     }
 
-    // filename aus rel ziehen, damit wir auf /data/... mappen können
-    const filename = path.basename(rel);
-
-    // ✅ Persistent Disk (dein Mount-Path ist /data/uploads/knowledge)
-   const relPath = normalizeRel(doc.image_url); // z.B. "uploads/knowledge/123-file.jpg"
+    const relPath = normalizeRel(doc.image_url); // z.B. "uploads/knowledge/123-file.jpg"
     if (!isAllowedUploadPath(relPath)) {
       console.log('[DEBUG] Blocked non-knowledge path:', relPath);
       return res.status(404).send('Not found');
     }
 
     const filename = path.basename(relPath);
-    const absDisk = path.join('/data/uploads/knowledge', filename);
+    const absDisk = path.join(KB_DISK_DIR, filename);
 
     // Fallbacks (Altbestand / lokale Pfade)
-    const absPublic = path.join(process.cwd(), 'public', rel);
-    const absProject = path.join(process.cwd(), rel);
+    const absPublic = path.join(process.cwd(), 'public', relPath);
+    const absProject = path.join(process.cwd(), relPath);
 
     const candidates = [absDisk, absPublic, absProject];
 
@@ -239,6 +245,13 @@ router.post('/kb/image',
       return res.status(400).json({ ok: false, error: 'Titel und Tags sind Pflicht' });
     }
 
+    // Basic validation: only allow images on this endpoint.
+    const mime = String(req.file.mimetype || '');
+    if (!mime.startsWith('image/')) {
+      rmSafe(req.file.path);
+      return res.status(400).json({ ok: false, error: 'Nur Bilddateien erlaubt' });
+    }
+
     try {
       const buffer = fs.readFileSync(req.file.path);
       rmSafe(req.file.path);
@@ -246,15 +259,12 @@ router.post('/kb/image',
       const out = await ingestOne({
   buffer,
   filename: req.file.originalname,
-  mime: req.file.mimetype,
+  mime,
   category: 'Bilder',
   tags: toArr(tags),
   title: title.toString(),
   label: null
 });
-
-// 🔥 JETZT erst löschen
-rmSafe(req.file.path);
 
 // 🔥 EINMALIGES Update
 if (out?.id) {
@@ -397,13 +407,15 @@ router.delete('/kb/:id', requireAuth, requireAdmin, async (req, res) => {
     const { rowCount } = await pool.query('DELETE FROM knowledge_docs WHERE id=$1', [id]);
     await pool.query('COMMIT');
 
-    if (img && img.startsWith('/uploads/knowledge/')) {
+    if (img) {
       const rel = normalizeRel(img);
-      const filename = path.basename(rel);
+      if (isAllowedUploadPath(rel)) {
+        const filename = path.basename(rel);
 
-      rmSafe(path.join('/data/uploads/knowledge', filename));                 // Persistent
-      rmSafe(path.join(__dirname, '..', 'public', rel));                      // Fallback alt
-      rmSafe(path.join(__dirname, '..', rel));                                // Legacy
+        rmSafe(path.join(KB_DISK_DIR, filename));                              // Persistent (oder lokaler Fallback)
+        rmSafe(path.join(__dirname, '..', 'public', rel));                     // Altbestand
+        rmSafe(path.join(__dirname, '..', rel));                               // Legacy
+      }
     }
 
     res.json({ ok: true, deleted: rowCount });
@@ -412,6 +424,6 @@ router.delete('/kb/:id', requireAuth, requireAdmin, async (req, res) => {
     console.error('[KB delete] error:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
-  });
+});
 
 module.exports = router;
