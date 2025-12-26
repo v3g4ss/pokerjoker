@@ -187,7 +187,7 @@ async function llmKbOnlyAnswer({ userText, context, systemPrompt, model, tempera
 // =======================
 // Chat Handler (FINAL)
 // =======================
-async function handleChat(req, res) {
+async function async function handleChat(req, res) {
   try {
     const uid = req.user?.id || req.session?.user?.id;
     const userText = (req.body?.message || '').trim();
@@ -195,7 +195,7 @@ async function handleChat(req, res) {
     if (!uid) return res.status(401).json({ ok:false, reply:'Nicht eingeloggt.' });
     if (!userText) return res.status(400).json({ ok:false, reply:'' });
 
-        // =======================
+    // =======================
     // Balance prüfen
     // =======================
     const balRes = await pool.query(
@@ -215,31 +215,25 @@ async function handleChat(req, res) {
     }
 
     // =======================
-    // Bot Config / System Prompt
+    // Bot Config
     // =======================
     const cfg  = await getBotConfig();
     const mode = normalizeKnowledgeMode(cfg?.knowledge_mode);
 
     const fallbackSys = `
 Du bist Poker Joker.
-Du erklärst Poker klar und freundlich.
+Du erklärst Poker klar und ruhig.
 
-UI-WICHTIG:
-- Du sagst NIEMALS, dass du keine Bilder oder Grafiken anzeigen kannst.
-- Bilder werden IMMER vom System eingeblendet.
-- Du wartest auf System-Anweisungen für visuelle Inhalte.
-- Wenn der User eine Grafik will, sag: "Alles klar – ich blende dir die passende Grafik ein." (ohne Disclaimer)
+UI-HINWEIS:
+- Du behauptest NIE, dass du keine Bilder anzeigen kannst.
+- Grafiken werden vom System eingeblendet.
     `.trim();
 
-    // Prompt-Playground / DB prompt should be the primary system prompt.
-    // We append non-negotiable UI rules to avoid image-disclaimer confusion.
     const sys = [
       (cfg?.system_prompt || '').trim() || fallbackSys,
       '---',
-      // Ensure these always apply even when admin prompt is changed.
       'UI-CONSTRAINTS:',
-      '- Never claim you cannot show images/graphics; the UI can render them.',
-      '- If the user asks for a graphic, acknowledge and wait for the system to display it.'
+      '- Never claim you cannot show images.'
     ].join('\n');
 
     const mdl  = cfg?.model || 'gpt-4o-mini';
@@ -248,66 +242,45 @@ UI-WICHTIG:
     let answer = '';
     let usedChunks = [];
     let answerSource = 'none';
+    let attachedImageId = null;
 
     // =======================
     // Knowledge Retrieval
     // =======================
-    // searchChunks(q, categories=[], topK=5)
     const hits = (mode === 'LLM_ONLY') ? [] : await searchChunks(userText, [], TOP_K);
-    // searchChunks() currently does not provide numeric relevance scores.
-    // Keep the previous behavior (treat any hit as usable) unless a score exists.
     const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
 
-    // ===== KB CONTEXT + ANSWER + ONE IMAGE (FINAL) =====
-if (strong.length) {
+    // =======================
+    // KB → Antwort → 1 Grafik
+    // =======================
+    if (strong.length) {
 
-  // --- KB-Chunks
-  usedChunks = strong.map(h => ({
-    id: h.id,
-    title: h.title,
-    source: h.source,
-    category: h.category
-  }));
+      usedChunks = strong.map(h => ({
+        id: h.id,
+        title: h.title,
+        source: h.source,
+        category: h.category
+      }));
 
-  let context = strong.map(h => h.text).filter(Boolean).join('\n---\n');
-  if (context.length > 2000) context = context.slice(0, 2000);
+      let context = strong.map(h => h.text).filter(Boolean).join('\n---\n');
+      if (context.length > 2000) context = context.slice(0, 2000);
 
-  // --- LLM Answer
-  const out = (mode === 'KB_ONLY')
-    ? await llmKbOnlyAnswer({
-        userText,
-        context,
-        systemPrompt: sys,
-        model: mdl,
-        temperature: 0
-      })
-    : await llmAnswer({
-        userText,
-        context,
-        systemPrompt: sys,
-        model: mdl,
-        temperature: temp
-      });
+      const out = (mode === 'KB_ONLY')
+        ? await llmKbOnlyAnswer({ userText, context, systemPrompt: sys, model: mdl, temperature: 0 })
+        : await llmAnswer({ userText, context, systemPrompt: sys, model: mdl, temperature: temp });
 
-  answer = out?.text || '';
-  if (answer) {
-    answerSource = (mode === 'KB_ONLY') ? 'kb_only_llm_strict' : 'kb_llm';
-  }
+      answer = out?.text || '';
+      if (answer) {
+        answerSource = (mode === 'KB_ONLY') ? 'kb_only_llm_strict' : 'kb_llm';
+      }
 
-  // --- IMAGE (LAST STEP, MAX ONE)
-  let imageId = null;
-
-  if (answer) {
-    const imageCandidates = await findImageIdsByQuery(userText, 3);
-    if (imageCandidates?.length) {
-      imageId = imageCandidates[0]; // EXAKT EINE
+      if (answer) {
+        const imageCandidates = await findImageIdsByQuery(userText, 3);
+        if (imageCandidates?.length) {
+          attachedImageId = imageCandidates[0]; // exakt eine
+        }
+      }
     }
-  }
-
-  if (imageId) {
-    attachedImageId = imageId;
-  }
-}
 
     // =======================
     // Fallback LLM
@@ -324,34 +297,15 @@ if (strong.length) {
       if (answer) answerSource = 'fallback_llm';
     }
 
-   // KB_ONLY: block only if NO KB CONTEXT exists
-    //if (mode === 'KB_ONLY' && (!hits?.length || !strong?.length)) {
-    if (mode === 'KB_ONLY' && (!hits?.length && !strong?.length)) {
-      console.log('[chat] KB_ONLY: no strong KB context (fallback blocked)');
-      answer = [
-        'Dazu finde ich in meiner Knowledge-Bibliothek aktuell kein passendes Wissen.',
-        'Formuliere die Frage bitte anders oder nenne konkrete Stichworte.'
-      ].join(' ');
+    // =======================
+    // KB_ONLY ohne Treffer
+    // =======================
+    if (mode === 'KB_ONLY' && (!hits.length && !strong.length)) {
+      answer = 'Dazu finde ich in meiner Knowledge-Bibliothek aktuell kein passendes Wissen.';
       answerSource = 'kb_only_no_answer';
     }
 
-    // Scrub misleading "can't show images" claims.
     answer = stripNoImageClaims(answer);
-
-        // If the user explicitly asks for an image, show it immediately.
-    // Otherwise offer it and wait for confirmation (stored in session).
-    if (imageCandidates.length) {
-      if (wantsImageNow) {
-        // show immediately
-      } else if (req.session && !req.session.imageOffer) {
-        req.session.imageOffer = {
-          text: userText,
-          imageIds: imageCandidates,
-          createdAt: Date.now()
-        };
-        answer += '\n\n👉 Willst du dazu eine passende Grafik sehen? (Ja/Nein)';
-      }
-    }
 
     // =======================
     // Tokenverbrauch
