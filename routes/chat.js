@@ -244,63 +244,96 @@ Du erklärst Poker klar und ruhig.
     // Knowledge Retrieval
     // =======================
     const hits = (mode === 'LLM_ONLY') ? [] : await searchChunks(userText, [], TOP_K);
-    const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
+const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
 
-    // =======================
-    // KB → Antwort → 1 Grafik
-    // =======================
-    if (strong.length) {
-      usedChunks = strong.map(h => ({
-        id: h.id,
-        title: h.title,
-        source: h.source,
-        category: h.category
-      }));
+// =======================
+// KB → Antwort → 1 Grafik
+// =======================
+if (strong.length) {
+  usedChunks = strong.map(h => ({
+    id: h.id,
+    title: h.title,
+    source: h.source,
+    category: h.category
+  }));
 
-      let context = strong.map(h => h.text).filter(Boolean).join('\n---\n');
-      if (context.length > 2000) context = context.slice(0, 2000);
+  let context = strong.map(h => h.text).filter(Boolean).join('\n---\n');
+  if (context.length > 2000) context = context.slice(0, 2000);
 
-      const out = (mode === 'KB_ONLY')
-        ? await llmKbOnlyAnswer({ userText, context, systemPrompt: sys, model: mdl, temperature: 0 })
-        : await llmAnswer({ userText, context, systemPrompt: sys, model: mdl, temperature: temp });
+  // --- 1) STRICT KB_ONLY (Zitatpflicht)
+  if (mode === 'KB_ONLY') {
+    const outStrict = await llmKbOnlyAnswer({
+      userText,
+      context,
+      systemPrompt: sys,
+      model: mdl,
+      temperature: 0
+    });
 
-      answer = out?.text || '';
-      if (answer) {
-        answerSource = (mode === 'KB_ONLY') ? 'kb_only_llm_strict' : 'kb_llm';
-      }
+    answer = outStrict?.text || '';
 
-      if (answer) {
-        const imageCandidates = await findImageIdsByQuery(userText, 3);
-        if (imageCandidates?.length) {
-          attachedImageId = imageCandidates[0];
-        }
-      }
-    }
-
-    // =======================
-    // Fallback LLM
-    // =======================
-    if (!answer && mode !== 'KB_ONLY') {
-      const out = await llmAnswer({
+    // --- 2) FALLBACK: erklärend, aber OHNE Anweisungen
+    if (!answer) {
+      const outExplain = await llmAnswer({
         userText,
-        context: null,
-        systemPrompt: sys,
+        context,
+        systemPrompt: sys + '\nERLAUBT: erklären, einordnen, beschreiben. VERBOTEN: konkrete Handlungsanweisungen.',
         model: mdl,
-        temperature: temp
+        temperature: 0.2
       });
-      answer = out.text;
-      if (answer) answerSource = 'fallback_llm';
+
+      answer = outExplain?.text || '';
+      if (answer) answerSource = 'kb_only_explained';
+    } else {
+      answerSource = 'kb_only_llm_strict';
     }
 
-    // =======================
-    // KB_ONLY ohne Treffer
-    // =======================
-    if (mode === 'KB_ONLY' && (!hits.length && !strong.length)) {
-      answer = 'Dazu finde ich in meiner Knowledge-Bibliothek aktuell kein passendes Wissen.';
-      answerSource = 'kb_only_no_answer';
-    }
+  } else {
+    // --- KB_PREFERRED / LLM_ONLY
+    const out = await llmAnswer({
+      userText,
+      context,
+      systemPrompt: sys,
+      model: mdl,
+      temperature: temp
+    });
+    answer = out?.text || '';
+    if (answer) answerSource = 'kb_llm';
+  }
 
-    answer = stripNoImageClaims(answer);
+  // --- Grafik NUR wenn Antwort existiert
+  if (answer) {
+    const imageCandidates = await findImageIdsByQuery(userText, 3);
+    if (imageCandidates?.length) {
+      attachedImageId = imageCandidates[0]; // exakt eine
+    }
+  }
+}
+
+// =======================
+// Fallback LLM (nur wenn NICHT KB_ONLY)
+// =======================
+if (!answer && mode !== 'KB_ONLY') {
+  const out = await llmAnswer({
+    userText,
+    context: null,
+    systemPrompt: sys,
+    model: mdl,
+    temperature: temp
+  });
+  answer = out.text;
+  if (answer) answerSource = 'fallback_llm';
+}
+
+// =======================
+// KB_ONLY ohne Treffer
+// =======================
+if (mode === 'KB_ONLY' && (!hits.length && !strong.length)) {
+  answer = 'Dazu finde ich in meiner Knowledge-Bibliothek aktuell kein passendes Wissen.';
+  answerSource = 'kb_only_no_answer';
+}
+
+answer = stripNoImageClaims(answer);
 
     // =======================
     // Tokenverbrauch
