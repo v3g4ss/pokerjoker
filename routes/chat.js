@@ -323,7 +323,7 @@ Du erklärst Poker klar und ruhig.
         if (bestScore > 0) {
           attachedImageId = bestId;
         }
-      }
+      }}
 
     // =======================
     // Fallback LLM (nur wenn NICHT KB_ONLY)
