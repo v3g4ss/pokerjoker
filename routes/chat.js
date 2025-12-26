@@ -46,13 +46,13 @@ function buildLikePatterns(text) {
   return uniq.map(w => `%${w}%`);
 }
 
-async function findImageIdsByQuery(text, limit = 3) {
+async function findImageCandidatesByQuery(text, limit = 5) {
   const patterns = buildLikePatterns(text);
   if (!patterns.length) return [];
 
   const r = await pool.query(
     `
-    SELECT id
+    SELECT id, description
     FROM knowledge_docs
     WHERE enabled = true
       AND image_url IS NOT NULL
@@ -61,6 +61,7 @@ async function findImageIdsByQuery(text, limit = 3) {
         filename ILIKE ANY($1) OR
         original_name ILIKE ANY($1) OR
         COALESCE(label, '') ILIKE ANY($1) OR
+        COALESCE(description, '') ILIKE ANY($1) OR
         COALESCE(array_to_string(tags, ','), '') ILIKE ANY($1)
       )
     ORDER BY priority DESC, id DESC
@@ -69,7 +70,7 @@ async function findImageIdsByQuery(text, limit = 3) {
     [patterns, limit]
   );
 
-  return r.rows.map(x => x.id);
+  return r.rows; // [{ id, description }]
 }
 
 function stripNoImageClaims(text) {
@@ -302,10 +303,40 @@ Du erklärst Poker klar und ruhig.
 
       // Grafik nur wenn Antwort existiert
       if (answer) {
-        const imageCandidates = await findImageIdsByQuery(userText, 3);
-        if (imageCandidates?.length) attachedImageId = imageCandidates[0];
+  const imageCandidates = await findImageCandidatesByQuery('downswing', 5);
+
+  const answerText = answer.toLowerCase();
+
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const img of imageCandidates) {
+    const desc = (img.description || '').toLowerCase();
+    if (!desc) continue;
+
+    let score = 0;
+
+    // simple semantische Überlappung
+    for (const word of desc.split(/\s+/)) {
+      if (word.length > 4 && answerText.includes(word)) {
+        score++;
       }
     }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = img.id;
+    }
+  }
+
+  // Nur anzeigen, wenn wirklich Kontext passt
+  if (bestScore > 0) {
+    attachedImageId = bestMatch;
+  }
+}
+
+  // Fallback: wenn nichts matched, GAR KEINE Grafik
+}
 
     // =======================
     // Fallback LLM (nur wenn NICHT KB_ONLY)
