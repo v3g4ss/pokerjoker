@@ -52,7 +52,7 @@ async function findImageCandidatesByQuery(text, limit = 5) {
 
   const r = await pool.query(
     `
-    SELECT id, description
+    SELECT id, caption
     FROM knowledge_docs
     WHERE enabled = true
       AND image_url IS NOT NULL
@@ -61,7 +61,7 @@ async function findImageCandidatesByQuery(text, limit = 5) {
         filename ILIKE ANY($1) OR
         original_name ILIKE ANY($1) OR
         COALESCE(label, '') ILIKE ANY($1) OR
-        COALESCE(description, '') ILIKE ANY($1) OR
+        COALESCE(caption, '') ILIKE ANY($1) OR
         COALESCE(array_to_string(tags, ','), '') ILIKE ANY($1)
       )
     ORDER BY priority DESC, id DESC
@@ -70,7 +70,7 @@ async function findImageCandidatesByQuery(text, limit = 5) {
     [patterns, limit]
   );
 
-  return r.rows; // [{ id, description }]
+  return r.rows; // [{ id, caption }]
 }
 
 function stripNoImageClaims(text) {
@@ -311,7 +311,7 @@ Du erklärst Poker klar und ruhig.
   let bestScore = 0;
 
   for (const img of imageCandidates) {
-    const desc = (img.description || '').toLowerCase();
+    const desc = (img.caption || '').toLowerCase();
     if (!desc) continue;
 
     let score = 0;
