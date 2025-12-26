@@ -188,7 +188,30 @@ async function llmKbOnlyAnswer({ userText, context, systemPrompt, model, tempera
 // Chat Handler (FINAL)
 // =======================
 async function handleChat(req, res) {
-  
+  try {
+    const uid = req.user?.id || req.session?.user?.id;
+    const userText = (req.body?.message || '').trim();
+
+    if (!uid) return res.status(401).json({ ok:false, reply:'Nicht eingeloggt.' });
+    if (!userText) return res.status(400).json({ ok:false, reply:'' });
+
+    // =======================
+    // Balance prüfen
+    // =======================
+    const balRes = await pool.query(
+      `SELECT balance, purchased FROM public.v_user_balances_live WHERE user_id=$1`,
+      [uid]
+    );
+    const balanceNow = balRes.rows?.[0]?.balance ?? 0;
+    const purchased  = balRes.rows?.[0]?.purchased ?? 0;
+
+    if (balanceNow < MIN_BALANCE_TO_CHAT) {
+      return res.status(402).json({
+        ok:false,
+        reply:'Zu wenig Tokens. Bitte Buy-in!',
+        balance: balanceNow,
+        purchased
+      });
     }
 
     // =======================
@@ -200,10 +223,6 @@ async function handleChat(req, res) {
     const fallbackSys = `
 Du bist Poker Joker.
 Du erklärst Poker klar und ruhig.
-
-UI-HINWEIS:
-- Du behauptest NIE, dass du keine Bilder anzeigen kannst.
-- Grafiken werden vom System eingeblendet.
     `.trim();
 
     const sys = [
@@ -231,7 +250,6 @@ UI-HINWEIS:
     // KB → Antwort → 1 Grafik
     // =======================
     if (strong.length) {
-
       usedChunks = strong.map(h => ({
         id: h.id,
         title: h.title,
@@ -254,7 +272,7 @@ UI-HINWEIS:
       if (answer) {
         const imageCandidates = await findImageIdsByQuery(userText, 3);
         if (imageCandidates?.length) {
-          attachedImageId = imageCandidates[0]; // exakt eine
+          attachedImageId = imageCandidates[0];
         }
       }
     }
