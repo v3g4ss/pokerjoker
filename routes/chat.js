@@ -195,36 +195,7 @@ async function handleChat(req, res) {
     if (!uid) return res.status(401).json({ ok:false, reply:'Nicht eingeloggt.' });
     if (!userText) return res.status(400).json({ ok:false, reply:'' });
 
-    // =======================
-    // Modus B – Zustimmung (GANZ AM ANFANG)
-    // =======================
-    // NOTE: request objects are recreated on every HTTP call.
-    // Persist the image offer state in the session, otherwise the "Ja" answer can't work.
-    if (req.session) req.session.imageOffer ??= null;
-
-    const yes = /(\bja\b|\byes\b|klar|ok|\bzeig\b|zeige|zeigen|grafik|bild)/i.test(userText);
-    const no = /(\bnein\b|\bno\b|nicht|später|lass|egal)/i.test(userText);
-
-    if (req.session?.imageOffer && yes) {
-      const ids = Array.isArray(req.session.imageOffer.imageIds)
-        ? req.session.imageOffer.imageIds
-        : [];
-      req.session.imageOffer = null;
-
-      return res.json({
-        ok: true,
-        reply: 'Alles klar – ich blende dir die Grafik ein 👇',
-        images: ids,
-        sources: []
-      });
-    }
-
-    if (req.session?.imageOffer && no) {
-      req.session.imageOffer = null;
-      // Continue as normal (user doesn't want the image).
-    }
-
-    // =======================
+        // =======================
     // Balance prüfen
     // =======================
     const balRes = await pool.query(
@@ -287,27 +258,56 @@ UI-WICHTIG:
     // Keep the previous behavior (treat any hit as usable) unless a score exists.
     const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
 
-    // Image candidates (for offer or direct show)
+    // ===== KB CONTEXT + ANSWER + ONE IMAGE (FINAL) =====
+if (strong.length) {
+
+  // --- KB-Chunks
+  usedChunks = strong.map(h => ({
+    id: h.id,
+    title: h.title,
+    source: h.source,
+    category: h.category
+  }));
+
+  let context = strong.map(h => h.text).filter(Boolean).join('\n---\n');
+  if (context.length > 2000) context = context.slice(0, 2000);
+
+  // --- LLM Answer
+  const out = (mode === 'KB_ONLY')
+    ? await llmKbOnlyAnswer({
+        userText,
+        context,
+        systemPrompt: sys,
+        model: mdl,
+        temperature: 0
+      })
+    : await llmAnswer({
+        userText,
+        context,
+        systemPrompt: sys,
+        model: mdl,
+        temperature: temp
+      });
+
+  answer = out?.text || '';
+  if (answer) {
+    answerSource = (mode === 'KB_ONLY') ? 'kb_only_llm_strict' : 'kb_llm';
+  }
+
+  // --- IMAGE (LAST STEP, MAX ONE)
+  let imageId = null;
+
+  if (answer) {
     const imageCandidates = await findImageIdsByQuery(userText, 3);
-
-    if (strong.length) {
-      usedChunks = strong.map(h => ({
-        id: h.id,
-        title: h.title,
-        source: h.source,
-        category: h.category
-      }));
-
-      let context = strong.map(h => h.text).filter(Boolean).join('\n---\n');
-      if (context.length > 2000) context = context.slice(0, 2000);
-
-      const out = (mode === 'KB_ONLY')
-        ? await llmKbOnlyAnswer({ userText, context, systemPrompt: sys, model: mdl, temperature: 0 })
-        : await llmAnswer({ userText, context, systemPrompt: sys, model: mdl, temperature: temp });
-
-      answer = out.text;
-      if (answer) answerSource = (mode === 'KB_ONLY') ? 'kb_only_llm_strict' : 'kb_llm';
+    if (imageCandidates?.length) {
+      imageId = imageCandidates[0]; // EXAKT EINE
     }
+  }
+
+  if (imageId) {
+    attachedImageId = imageId;
+  }
+}
 
     // =======================
     // Fallback LLM
@@ -324,35 +324,21 @@ UI-WICHTIG:
       if (answer) answerSource = 'fallback_llm';
     }
 
-    // KB_ONLY: never call the model without context.
-    if (!answer && mode === 'KB_ONLY') {
-      if (!hits?.length) {
-        console.log('[chat] KB_ONLY: no KB hits for query (fallback blocked)');
-      }
+   // KB_ONLY: block only if NO KB CONTEXT exists
+    //if (mode === 'KB_ONLY' && (!hits?.length || !strong?.length)) {
+    if (mode === 'KB_ONLY' && (!hits?.length && !strong?.length)) {
+      console.log('[chat] KB_ONLY: no strong KB context (fallback blocked)');
       answer = [
         'Dazu finde ich in meiner Knowledge-Bibliothek aktuell kein passendes Wissen.',
-        'Formuliere die Frage bitte anders oder nenne konkrete Stichworte (z.B. Hand, Spot, Stackgröße, Position).'
+        'Formuliere die Frage bitte anders oder nenne konkrete Stichworte.'
       ].join(' ');
       answerSource = 'kb_only_no_answer';
-    }
-
-    if (mode === 'KB_ONLY') {
-      console.log('[chat] KB_ONLY result', {
-        hits: (hits || []).length,
-        strong: (strong || []).length,
-        answerSource
-      });
     }
 
     // Scrub misleading "can't show images" claims.
     answer = stripNoImageClaims(answer);
 
-    // =======================
-    // Modus B – Bild anbieten (NUR WENN KEIN OFFER AKTIV)
-    // =======================
-    const wantsImageNow = /(grafik|bild|zeige|zeig|image)/i.test(userText);
-
-    // If the user explicitly asks for an image, show it immediately.
+        // If the user explicitly asks for an image, show it immediately.
     // Otherwise offer it and wait for confirmation (stored in session).
     if (imageCandidates.length) {
       if (wantsImageNow) {
@@ -393,7 +379,7 @@ UI-WICHTIG:
       balance: after.balance,
       purchased,
       sources: usedChunks,
-      images: wantsImageNow ? imageCandidates : []
+      images: attachedImageId ? [attachedImageId] : []
     });
 
   } catch (err) {
