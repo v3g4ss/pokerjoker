@@ -244,7 +244,7 @@ Du erklärst Poker klar und ruhig.
     // Knowledge Retrieval
     // =======================
     const hits = (mode === 'LLM_ONLY') ? [] : await searchChunks(userText, [], TOP_K);
-const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
+    const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
 
 // =======================
 // KB → Antwort → 1 Grafik
@@ -354,15 +354,8 @@ answer = stripNoImageClaims(answer);
       INSERT INTO chat_history (user_id, role, message)
       VALUES ($1,'user',$2),($1,'assistant',$3)
     `, [uid, userText, answer]);
-
-    return res.json({
-      ok: true,
-      reply: answer,
-      balance: after.balance,
-      purchased,
-      sources: usedChunks,
-      images: attachedImageId ? [attachedImageId] : []
-    });
+   
+    
 
   } catch (err) {
     console.error('CHAT ERROR:', err);
