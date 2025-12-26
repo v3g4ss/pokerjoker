@@ -246,94 +246,97 @@ Du erklärst Poker klar und ruhig.
     const hits = (mode === 'LLM_ONLY') ? [] : await searchChunks(userText, [], TOP_K);
     const strong = (hits || []).filter(h => (h.score ?? 1) >= MIN_MATCH_SCORE);
 
-// =======================
-// KB → Antwort → 1 Grafik
-// =======================
-if (strong.length) {
-  usedChunks = strong.map(h => ({
-    id: h.id,
-    title: h.title,
-    source: h.source,
-    category: h.category
-  }));
+    // =======================
+    // KB → Antwort → 1 Grafik
+    // =======================
+    if (strong.length) {
+      usedChunks = strong.map(h => ({
+        id: h.id,
+        title: h.title,
+        source: h.source,
+        category: h.category
+      }));
 
-  let context = strong.map(h => h.text).filter(Boolean).join('\n---\n');
-  if (context.length > 2000) context = context.slice(0, 2000);
+      let context = strong.map(h => h.text).filter(Boolean).join('\n---\n');
+      if (context.length > 2000) context = context.slice(0, 2000);
 
-  // --- 1) STRICT KB_ONLY (Zitatpflicht)
-  if (mode === 'KB_ONLY') {
-    const outStrict = await llmKbOnlyAnswer({
-      userText,
-      context,
-      systemPrompt: sys,
-      model: mdl,
-      temperature: 0
-    });
+      if (mode === 'KB_ONLY') {
+        // 1) STRICT
+        const outStrict = await llmKbOnlyAnswer({
+          userText,
+          context,
+          systemPrompt: sys,
+          model: mdl,
+          temperature: 0
+        });
 
-    answer = outStrict?.text || '';
+        answer = outStrict?.text || '';
+        if (answer) {
+          answerSource = 'kb_only_llm_strict';
+        }
 
-    // --- 2) FALLBACK: erklärend, aber OHNE Anweisungen
-    if (!answer) {
-      const outExplain = await llmAnswer({
+        // 2) Explain fallback (nur wenn strict leer)
+        if (!answer && userText.length < 120) {
+          const outExplain = await llmAnswer({
+            userText,
+            context,
+            systemPrompt: sys + '\nERLAUBT: erklären, einordnen. VERBOTEN: konkrete Handlungsanweisungen.',
+            model: mdl,
+            temperature: 0.2
+          });
+          answer = outExplain?.text || '';
+          if (answer) answerSource = 'kb_only_explained';
+        }
+      } else {
+        // KB_PREFERRED / LLM_ONLY (mit Kontext)
+        const out = await llmAnswer({
+          userText,
+          context,
+          systemPrompt: sys,
+          model: mdl,
+          temperature: temp
+        });
+        answer = out?.text || '';
+        if (answer) answerSource = 'kb_llm';
+      }
+
+      // Grafik nur wenn Antwort existiert
+      if (answer) {
+        const imageCandidates = await findImageIdsByQuery(userText, 3);
+        if (imageCandidates?.length) attachedImageId = imageCandidates[0];
+      }
+    }
+
+    // =======================
+    // Fallback LLM (nur wenn NICHT KB_ONLY)
+    // =======================
+    if (!answer && mode !== 'KB_ONLY') {
+      const out = await llmAnswer({
         userText,
-        context,
-        systemPrompt: sys + '\nERLAUBT: erklären, einordnen, beschreiben. VERBOTEN: konkrete Handlungsanweisungen.',
+        context: null,
+        systemPrompt: sys,
         model: mdl,
-        temperature: 0.2
+        temperature: temp
       });
-
-      answer = outExplain?.text || '';
-      if (answer) answerSource = 'kb_only_explained';
-    } else {
-      answerSource = 'kb_only_llm_strict';
+      answer = out.text;
+      if (answer) answerSource = 'fallback_llm';
     }
 
-  } else {
-    // --- KB_PREFERRED / LLM_ONLY
-    const out = await llmAnswer({
-      userText,
-      context,
-      systemPrompt: sys,
-      model: mdl,
-      temperature: temp
-    });
-    answer = out?.text || '';
-    if (answer) answerSource = 'kb_llm';
-  }
-
-  // --- Grafik NUR wenn Antwort existiert
-  if (answer) {
-    const imageCandidates = await findImageIdsByQuery(userText, 3);
-    if (imageCandidates?.length) {
-      attachedImageId = imageCandidates[0]; // exakt eine
+    // =======================
+    // KB_ONLY ohne Treffer
+    // =======================
+    if (mode === 'KB_ONLY' && (!hits.length && !strong.length)) {
+      answer = 'Dazu finde ich in meiner Knowledge-Bibliothek aktuell kein passendes Wissen.';
+      answerSource = 'kb_only_no_answer';
     }
-  }
-}
 
-// =======================
-// Fallback LLM (nur wenn NICHT KB_ONLY)
-// =======================
-if (!answer && mode !== 'KB_ONLY') {
-  const out = await llmAnswer({
-    userText,
-    context: null,
-    systemPrompt: sys,
-    model: mdl,
-    temperature: temp
-  });
-  answer = out.text;
-  if (answer) answerSource = 'fallback_llm';
-}
+    // Notfall: niemals leere Antwort hängen lassen (verhindert "..." + Timeouts)
+    if (!answer) {
+      answer = 'Ich hab gerade keinen sauberen Treffer rausbekommen. Formulier’s kurz um oder gib 2–3 Stichworte.';
+      answerSource = (mode === 'KB_ONLY') ? 'kb_only_no_answer' : 'fallback_empty';
+    }
 
-// =======================
-// KB_ONLY ohne Treffer
-// =======================
-if (mode === 'KB_ONLY' && (!hits.length && !strong.length)) {
-  answer = 'Dazu finde ich in meiner Knowledge-Bibliothek aktuell kein passendes Wissen.';
-  answerSource = 'kb_only_no_answer';
-}
-
-answer = stripNoImageClaims(answer);
+    answer = stripNoImageClaims(answer);
 
     // =======================
     // Tokenverbrauch
@@ -344,7 +347,7 @@ answer = stripNoImageClaims(answer);
     const max   = Number(cfg?.max_usedtokens_per_msg ?? 300);
     const charge = Math.min(Math.ceil((words + punct) * rate), max);
 
-    await tokenDb.consumeTokens(uid, charge, `chat usage`);
+    await tokenDb.consumeTokens(uid, charge, 'chat usage');
     const after = await tokenDb.getTokens(uid);
 
     // =======================
@@ -354,8 +357,17 @@ answer = stripNoImageClaims(answer);
       INSERT INTO chat_history (user_id, role, message)
       VALUES ($1,'user',$2),($1,'assistant',$3)
     `, [uid, userText, answer]);
-   
-    
+
+    // ✅ DAS hat bei dir gefehlt → sonst timeout/503
+    return res.json({
+      ok: true,
+      reply: answer,
+      balance: after.balance,
+      purchased,
+      sources: usedChunks,
+      images: attachedImageId ? [attachedImageId] : [],
+      answerSource
+    });
 
   } catch (err) {
     console.error('CHAT ERROR:', err);
