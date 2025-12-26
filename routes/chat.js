@@ -187,31 +187,8 @@ async function llmKbOnlyAnswer({ userText, context, systemPrompt, model, tempera
 // =======================
 // Chat Handler (FINAL)
 // =======================
-async function async function handleChat(req, res) {
-  try {
-    const uid = req.user?.id || req.session?.user?.id;
-    const userText = (req.body?.message || '').trim();
-
-    if (!uid) return res.status(401).json({ ok:false, reply:'Nicht eingeloggt.' });
-    if (!userText) return res.status(400).json({ ok:false, reply:'' });
-
-    // =======================
-    // Balance prüfen
-    // =======================
-    const balRes = await pool.query(
-      `SELECT balance, purchased FROM public.v_user_balances_live WHERE user_id=$1`,
-      [uid]
-    );
-    const balanceNow = balRes.rows?.[0]?.balance ?? 0;
-    const purchased  = balRes.rows?.[0]?.purchased ?? 0;
-
-    if (balanceNow < MIN_BALANCE_TO_CHAT) {
-      return res.status(402).json({
-        ok:false,
-        reply:'Zu wenig Tokens. Bitte Buy-in!',
-        balance: balanceNow,
-        purchased
-      });
+async function handleChat(req, res) {
+  
     }
 
     // =======================
