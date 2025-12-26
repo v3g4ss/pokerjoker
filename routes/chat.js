@@ -46,31 +46,24 @@ function buildLikePatterns(text) {
   return uniq.map(w => `%${w}%`);
 }
 
-async function findImageCandidatesByQuery(text, limit = 5) {
-  const patterns = buildLikePatterns(text);
-  if (!patterns.length) return [];
-
+async function findImageCandidatesByTopic(topic, limit = 5) {
   const r = await pool.query(
     `
-    SELECT id, caption
+    SELECT id, image_caption
     FROM knowledge_docs
     WHERE enabled = true
       AND image_url IS NOT NULL
       AND (
-        title ILIKE ANY($1) OR
-        filename ILIKE ANY($1) OR
-        original_name ILIKE ANY($1) OR
-        COALESCE(label, '') ILIKE ANY($1) OR
-        COALESCE(caption, '') ILIKE ANY($1) OR
-        COALESCE(array_to_string(tags, ','), '') ILIKE ANY($1)
+        label = $1
+        OR $1 = ANY(tags)
       )
     ORDER BY priority DESC, id DESC
     LIMIT $2;
     `,
-    [patterns, limit]
+    [topic, limit]
   );
 
-  return r.rows; // [{ id, caption }]
+  return r.rows; // [{ id, image_caption }]
 }
 
 function stripNoImageClaims(text) {
@@ -301,42 +294,36 @@ Du erklärst Poker klar und ruhig.
         if (answer) answerSource = 'kb_llm';
       }
 
-      // Grafik nur wenn Antwort existiert
+      // =======================
+      // Kontextbasierte Grafik-Auswahl (FINAL)
+      // =======================
       if (answer) {
-  const imageCandidates = await findImageCandidatesByQuery('downswing', 5);
+        const images = await findImageCandidatesByTopic('downswing', 5);
 
-  const answerText = answer.toLowerCase();
+        const a = answer.toLowerCase();
+        let bestId = null;
+        let bestScore = 0;
 
-  let bestMatch = null;
-  let bestScore = 0;
+        for (const img of images) {
+          const cap = (img.image_caption || '').toLowerCase();
+          if (!cap) continue;
 
-  for (const img of imageCandidates) {
-    const desc = (img.caption || '').toLowerCase();
-    if (!desc) continue;
+          let score = 0;
 
-    let score = 0;
+          for (const word of cap.split(/\s+/)) {
+            if (word.length > 4 && a.includes(word)) score++;
+          }
 
-    // simple semantische Überlappung
-    for (const word of desc.split(/\s+/)) {
-      if (word.length > 4 && answerText.includes(word)) {
-        score++;
+          if (score > bestScore) {
+            bestScore = score;
+            bestId = img.id;
+          }
+        }
+
+        if (bestScore > 0) {
+          attachedImageId = bestId;
+        }
       }
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = img.id;
-    }
-  }
-
-  // Nur anzeigen, wenn wirklich Kontext passt
-  if (bestScore > 0) {
-    attachedImageId = bestMatch;
-  }
-}
-
-  // Fallback: wenn nichts matched, GAR KEINE Grafik
-}
 
     // =======================
     // Fallback LLM (nur wenn NICHT KB_ONLY)
